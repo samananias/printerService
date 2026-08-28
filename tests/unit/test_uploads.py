@@ -8,6 +8,9 @@ cases here prove files are DETECTED correctly and then refused until their
 phase lands (docs/MULTI_FORMAT_PLAN.md §10).
 """
 
+import zipfile
+from io import BytesIO
+
 import pytest
 
 from app.services import uploads
@@ -19,6 +22,14 @@ from app.services.uploads import (
     upload_path,
     validate_upload,
 )
+
+
+def make_docx_bytes() -> bytes:
+    """The smallest ZIP that detection treats as a DOCX (word/ part)."""
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("word/document.xml", b"<xml/>")
+    return buffer.getvalue()
 
 
 class TestValidateUpload:
@@ -69,18 +80,32 @@ class TestValidateUpload:
         # and its category flows to the job/pipeline.
         assert validate_upload("photo.jpg", b"\xff\xd8\xff\xe0" + b"x" * 32) == "image"
 
-    def test_detected_but_unregistered_format_refused_until_its_phase(self):
-        # Office files are DETECTED correctly (detection sniffs the ZIP for
-        # word/ parts) but no processor is registered yet — refused with the
-        # honest message.
-        import io
-        import zipfile
+    def test_office_file_accepted_when_libreoffice_is_available(self, monkeypatch):
+        # Phase 3 registered the office processor; acceptance depends on
+        # the machine having LibreOffice (patched here — the dev/CI boxes
+        # don't have it, which is exactly the state the next test pins).
+        monkeypatch.setattr(
+            "app.processors.office.OfficeProcessor.available", lambda self: True
+        )
+        assert validate_upload("invoice.docx", make_docx_bytes()) == "office"
 
-        buffer = io.BytesIO()
-        with zipfile.ZipFile(buffer, "w") as archive:
-            archive.writestr("word/document.xml", b"<xml/>")
+    def test_office_file_refused_with_an_actionable_message_when_unavailable(
+        self, monkeypatch
+    ):
+        # The kill switch / missing LibreOffice: registered, but not
+        # runnable — the message must say what to DO, not just "no".
+        monkeypatch.setattr(
+            "app.processors.office.OfficeProcessor.available", lambda self: False
+        )
+        with pytest.raises(UploadError, match="LibreOffice") as exc_info:
+            validate_upload("invoice.docx", make_docx_bytes())
+        assert exc_info.value.status_code == 415
+
+    def test_detected_but_unregistered_format_refused_until_its_phase(self):
+        # Text has no processor yet (Phase 4): detected via extension,
+        # refused until then.
         with pytest.raises(UploadError, match="later phase") as exc_info:
-            validate_upload("invoice.docx", buffer.getvalue())
+            validate_upload("notes.txt", b"just some plain text content here")
         assert exc_info.value.status_code == 415
 
     def test_no_filename_and_unknown_content_is_unsupported(self):

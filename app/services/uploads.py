@@ -36,7 +36,18 @@ from app.detection import (
     category_for,
     magic_category,
 )
-from app.processors import for_category
+from app.processors import for_category, supported_categories
+
+# For a REGISTERED-but-unavailable processor: the message must tell the
+# phone user what to do (office is the case today — LibreOffice missing or
+# the ENABLE_OFFICE kill switch).
+UNAVAILABLE_MESSAGES = {
+    "office": (
+        "Office printing is unavailable on this server — LibreOffice is not "
+        "installed, or ENABLE_OFFICE=0 in .env. Convert the document to PDF "
+        "first, or install LibreOffice to enable office formats."
+    ),
+}
 
 
 class UploadError(Exception):
@@ -134,12 +145,24 @@ def validate_upload(filename: str, data: bytes) -> str:
         }[category]
         raise UploadError(reason, status_code=415)
 
-    # 3. Availability — a category prints only once its processor is
-    #    registered (app/processors). Phase 1: PDF only.
-    if for_category(category) is None:
+    # 3. Availability — two distinct gates, two distinct messages:
+    #    (a) no processor registered yet → "arrives in a later phase";
+    #    (b) registered but not runnable on THIS machine (office kill
+    #        switch / LibreOffice missing) → an actionable message.
+    processor = for_category(category)
+    if processor is None:
+        printable = ", ".join(supported_categories())
         raise UploadError(
             f"'{ext or 'this format'}' files cannot be printed yet — support "
-            "arrives in a later phase. Currently supported: .pdf.",
+            f"arrives in a later phase. Currently printable: {printable}.",
+            status_code=415,
+        )
+    if not processor.available():
+        raise UploadError(
+            UNAVAILABLE_MESSAGES.get(
+                category,
+                f"'{ext or category}' printing is unavailable on this server.",
+            ),
             status_code=415,
         )
 

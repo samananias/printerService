@@ -205,6 +205,10 @@ AV scanning — ⚪ v2+ options.
   `office.py` adapter (timeout, taskkill, profile isolation,
   `ENABLE_OFFICE` kill switch); friendly error mapping; font-pack docs;
   verify a table-heavy DOCX and a print-area XLSX on real paper.
+  Code landed in p12 (fresh throwaway profile per conversion instead of a
+  shared one — crash-proof, ~1 s warmup cost). Physical check pending T6
+  (`spike_t6_office.py`, needs `pip install python-docx openpyxl
+  python-pptx` spike-only) — this phase's acceptance gate.
 - **Phase 4 (p13) — text/CSV:** reportlab renderer — TXT = monospace text
   with wrap; CSV = bordered grid with row/col caps + "truncated" notice.
 - **Phase 5 (p14) — queue management:** cancel while queued/converting;

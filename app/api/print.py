@@ -11,9 +11,9 @@ is now format-agnostic (docs/MULTI_FORMAT_PLAN.md §8):
   1. FastAPI/python-multipart parse the request and hand us the bytes.
   2. validate_upload() applies the Section 8 checks (type, content,
      availability, size) and returns the detected category. A category
-     prints once its processor is registered (app/processors) — PDF and
-     images today; office/text arrive in later phases and are refused
-     with a "support arrives in a later phase" message until then.
+     prints once its processor is registered AND available on this
+     machine (PDF and images always; office additionally needs LibreOffice
+     installed / ENABLE_OFFICE=1). Refusals explain which gate fired.
   3. save_upload() stores the bytes under a unique job id, keeping the
      real extension.
   4. The job is registered (category recorded) and handed to the

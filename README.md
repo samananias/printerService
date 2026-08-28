@@ -18,6 +18,7 @@
 | `tests/conftest.py` | Shared fixtures: fresh job store, temp `uploads/`, fake `win32print`, print mock |
 | `spike_print_test.py` | Standalone printer diagnostic — run it when printing misbehaves |
 | `spike_t5_images.py` | Image-printing spike (T5) — run once at the printer to verify photo output |
+| `spike_t6_office.py` | Office-printing spike (T6) — run once after installing LibreOffice |
 | `allow_firewall_8000.bat` | One-click firewall rule (run as administrator, once) |
 | `.env.example` | Configuration template — copy to `.env` (never committed) |
 | `requirements.txt` | Python packages: fastapi, uvicorn, pywin32, python-multipart, pillow |
@@ -37,6 +38,7 @@
 | **Python 3.12+** | Runs the service | `winget install -e --id Python.Python.3.12` or [python.org](https://www.python.org/downloads/). Verify: `python --version`. If typing `python` opens the Microsoft Store: *Settings → Apps → Advanced app settings → App execution aliases* → turn OFF `python.exe` / `python3.exe` |
 | **SumatraPDF** | The PDF printing engine — the service hands PDFs to it silently | `winget install SumatraPDF.SumatraPDF` or [sumatrapdfreader.org](https://www.sumatrapdfreader.org). No configuration needed — standard install locations are searched automatically |
 | **Epson L3210 driver** | Windows must print normally on its own first | Test: *Settings → Printers → Epson L3210 → Print test page*. If that fails, fix it before anything else |
+| **LibreOffice** *(optional)* | Office documents (DOCX/XLSX/PPTX/ODF) are converted to PDF through it. Without it, office uploads are refused with a clear message — everything else keeps working | [libreoffice.org](https://www.libreoffice.org) or `winget install TheDocumentFoundation.LibreOffice`. Verify: `soffice --version` in a terminal (or just restart the service after installing) |
 | **Firewall rule, TCP 8000** | The #1 reason phones "can't connect" | Right-click `allow_firewall_8000.bat` → **Run as administrator** (one time), or accept Windows' pop-up on first run (tick *Private networks*) |
 
 ### The phone
@@ -85,10 +87,13 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 1. Find the service PC's IP: run `ipconfig`, note the **IPv4 Address** (e.g. `192.168.1.5`). Tip: set a **DHCP reservation** for it in the router so it never changes.
 2. On the phone (same Wi-Fi): open `http://<that-ip>:8000`
-3. Pick a PDF or an image (JPG/PNG/WebP) → tap **Print** → watch the status:
+3. Pick a PDF, image (JPG/PNG/WebP), or Office document (DOCX/XLSX/PPTX/ODF)
+   → tap **Print** → watch the status:
    `📨 Queued… → ⏳ status: queued… → 🖨️ Printed to EPSON L3210 Series!`
 4. Paper comes out. Done. Images are placed on a white A4 page, fitted and
-   centered; phone-photo rotation (EXIF) is handled automatically.
+   centered; phone-photo rotation (EXIF) is handled automatically. Office
+   documents need LibreOffice on the server (§1); DOCX/XLSX/PPTX convert in
+   roughly 10–30 s — the page shows `converting` while that runs.
 
 Other endpoints (also browsable interactively at `http://<ip>:8000/docs`):
 
@@ -96,7 +101,7 @@ Other endpoints (also browsable interactively at `http://<ip>:8000/docs`):
 |---|---|
 | `GET /health` | Is the service up? First thing to check when anything seems broken |
 | `GET /printers` | Which printers Windows sees (the L3210 should be listed) |
-| `POST /print` | Upload a file (PDF, or JPG/PNG/WebP image) and print it |
+| `POST /print` | Upload a file (PDF, image, or Office document) and print it |
 | `GET /jobs` | Recent jobs and their statuses |
 | `GET /jobs/{id}` | One job's status (what the page polls) |
 | `DELETE /jobs/{id}` | Cancel a job that hasn't printed yet |
@@ -114,6 +119,9 @@ Copy `.env.example` → `.env` and edit. All values are optional; defaults work.
 | `PRINTER_NAME` | *(empty)* | Target printer. Empty = Windows' default printer |
 | `SUMATRA_PATH` | *(empty)* | Explicit path to `SumatraPDF.exe`. Empty = search standard locations. If set, used as-is (misconfiguration fails loudly) |
 | `PAPER_SIZE` | *(empty)* | Paper size sent to the driver (`paper=<X>,fit` via SumatraPDF, e.g. `A4`). Empty = the driver chooses — the spike-proven default. Images are laid out on A4 when empty |
+| `ENABLE_OFFICE` | `1` | Office-document printing (DOCX/XLSX/PPTX/ODF → PDF via LibreOffice). `0` = office uploads refused with a clear message, everything else unaffected |
+| `LO_PATH` | *(empty)* | Explicit path to `soffice.exe`. Empty = search standard install locations |
+| `CONVERT_TIMEOUT_S` | `120` | Seconds an office conversion may run before LibreOffice is killed |
 | `HOST`, `PORT` | `8000` | Informational — actually pass them on the uvicorn command line (§3) |
 
 ---
@@ -128,7 +136,7 @@ python spike_print_test.py
 
 It reports: printer visibility (T1), spooler acceptance (T2), Windows print-verb (T3), SumatraPDF (T4) — with a summary and "what to do with this result" guidance. **T4 passing + paper = the whole chain works.** See SOURCE_OF_TRUTH Section 5 for the recorded results that decided the current design.
 
-For the multi-format work, `spike_t5_images.py` runs the same kind of hardware check for image printing (converts test images with the service's real processor, prints them, and gives you a paper checklist). Its results are the Phase 2 acceptance gate — see `docs/MULTI_FORMAT_PLAN.md` §14.
+For the multi-format work, `spike_t5_images.py` (images) and `spike_t6_office.py` (DOCX/XLSX/PPTX after installing LibreOffice) run the same kind of hardware check for the newer formats — each converts test files with the service's real processors, prints them, and gives you a paper checklist. Their results are the phases' acceptance gates — see `docs/MULTI_FORMAT_PLAN.md` §14.
 
 ---
 
@@ -154,6 +162,9 @@ For the multi-format work, `spike_t5_images.py` runs the same kind of hardware c
 | Phone reaches `/health` but print fails | Read the error on the page or in `logs/service.log`; run the spike (§6) |
 | Job `failed`: SumatraPDF not found | Install SumatraPDF (§1) or set `SUMATRA_PATH` in `.env` |
 | Job `failed`: printer not default / offline | Check the printer in Windows, print a Windows test page |
+| Office upload refused: "LibreOffice is not installed / ENABLE_OFFICE=0" | Install LibreOffice (§1) or set `ENABLE_OFFICE=1` in `.env`, then restart the service |
+| Office job `failed`: "did not finish within 120 s" | Big/complex document — raise `CONVERT_TIMEOUT_S` in `.env`, or export a PDF from the source app |
+| Office output looks wrong (fonts/pagination) | Install common fonts on the server; for XLSX, set a print area in Excel before saving (§ docs/MULTI_FORMAT_PLAN.md §7) |
 | Service IP changed after reboot | Set the router's DHCP reservation (§7 step 7) |
 
 Full troubleshooting table: [docs/SOURCE_OF_TRUTH.md](docs/SOURCE_OF_TRUTH.md) Section 14. Debug in this order — connectivity (IP/port) → firewall → service → printing logic (Section 15 explains why).

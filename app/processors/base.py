@@ -33,6 +33,17 @@ class Processor(Protocol):
     with their own timeout + process-tree kill.
     """
 
+    def available(self) -> bool:
+        """Whether this processor can run on THIS machine right now.
+
+        A processor can be registered but still disabled (the office kill
+        switch) or missing its external tool (LibreOffice not installed).
+        The upload gate checks this so users get an actionable message —
+        "install LibreOffice / flip ENABLE_OFFICE" — instead of a job that
+        dies later with a subprocess error.
+        """
+        ...
+
     def process(self, src: Path, out_dir: Path) -> Path:
         """Convert `src` into a print-ready PDF and return that PDF's path.
 

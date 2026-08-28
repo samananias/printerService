@@ -2,12 +2,15 @@
 
 Registering a processor here is the ONLY code change needed to enable a
 format category (its magic signatures already live in app/detection.py).
-A category without a registration is detected but refused at upload time —
-the Phase 2 state for office/text (docs/MULTI_FORMAT_PLAN.md §10).
+A category without a registration is detected but refused at upload time;
+a REGISTERED processor can still be per-machine unavailable (the office
+kill switch, LibreOffice missing) — that's what Processor.available() is
+for (docs/MULTI_FORMAT_PLAN.md §10).
 """
 
 from app.processors.base import ConversionError, Processor
 from app.processors.images import IMAGE_PROCESSOR
+from app.processors.office import OFFICE_PROCESSOR
 from app.processors.pdf import PDF_PROCESSOR
 
 __all__ = [
@@ -19,6 +22,7 @@ __all__ = [
 
 _REGISTRY: dict[str, Processor] = {
     "image": IMAGE_PROCESSOR,
+    "office": OFFICE_PROCESSOR,
     "pdf": PDF_PROCESSOR,
 }
 

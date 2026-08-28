@@ -10,6 +10,11 @@ from pathlib import Path
 
 
 class PdfProcessor:
+    def available(self) -> bool:
+        # PDFs need nothing but SumatraPDF, which the print engine already
+        # requires — always available.
+        return True
+
     def process(self, src: Path, out_dir: Path) -> Path:
         # Source bytes were validated at upload time (magic + size); the
         # real "can Sumatra open it" check happens when Sumatra runs, and

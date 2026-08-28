@@ -111,6 +111,10 @@ def _page_canvas(img: Image.Image) -> Image.Image:
 
 
 class ImageProcessor:
+    def available(self) -> bool:
+        # Pillow is a hard dependency (requirements.txt) — always available.
+        return True
+
     def process(self, src: Path, out_dir: Path) -> Path:
         """Convert an image file into the print-ready PDF the engine gets."""
         pdf_path = out_dir / f"{src.stem}.pdf"
