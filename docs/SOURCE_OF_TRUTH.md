@@ -189,9 +189,9 @@ None of these should be assumed to work out of the box on your specific old PC w
 - T1 PASS — printer visible via `win32print`; target `EPSON L3210 Series` (default).
 - T2 PASS — RAW text job accepted by the spooler.
 - T3 FAIL — `WinError 1155`: no PDF application on the machine registers the Windows "print" verb. Expected on modern Windows; not a driver problem.
-- T4 SKIP — SumatraPDF was not installed at the time of the run.
+- T4 PASS (after installing SumatraPDF at `%LOCALAPPDATA%\SumatraPDF\SumatraPDF.exe` — a location the service's standard search already covers) — **a test page physically printed**, confirming the full Python → SumatraPDF → spooler → L3210 → paper chain.
 
-🔵 **Decision:** **SumatraPDF** (`SumatraPDF.exe -print-to "<printer>" -silent <file.pdf>`) is the primary PDF printing method; the print verb remains a code fallback (default printer only); PDF→image conversion is the unimplemented last resort. Implemented in `app/printer/windows.py`; submission runs in a background thread (`app/services/pipeline.py`) so `POST /print` returns `"queued"` immediately and job status moves `queued → done/failed`. **Remaining confirmation:** install SumatraPDF, re-run the spike (expect T4 PASS), then verify a real end-to-end print; re-confirm on the old PC at deploy time.
+🔵 **Decision:** **SumatraPDF** (`SumatraPDF.exe -print-to "<printer>" -silent <file.pdf>`) is the primary PDF printing method; the print verb remains a code fallback (default printer only); PDF→image conversion is the unimplemented last resort. Implemented in `app/printer/windows.py`; submission runs in a background thread (`app/services/pipeline.py`) so `POST /print` returns `"queued"` immediately and job status moves `queued → done/failed`. **Status: confirmed working end-to-end via the spike (real page printed).** Re-confirm on the old PC at deploy time.
 
 ---
 
