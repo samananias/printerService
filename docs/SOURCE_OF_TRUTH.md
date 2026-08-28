@@ -1,7 +1,7 @@
 # Printer Service — Source of Truth
 
 **Project:** Android → Network → Python Service → USB → Epson L3210
-**Status:** Living document. Update this file whenever a decision changes.
+**Status:** ✅ MVP working end-to-end (spike T4 PASS: real page printed via SumatraPDF; phone → service → paper verified). Living document. Update this file whenever a decision changes.
 **Audience:** Beginner learning networking, servers, and Python.
 **Quickstart & pre-setup checklist:** see the root [README.md](../README.md).
 
