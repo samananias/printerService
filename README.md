@@ -19,9 +19,10 @@
 | `spike_print_test.py` | Standalone printer diagnostic — run it when printing misbehaves |
 | `spike_t5_images.py` | Image-printing spike (T5) — run once at the printer to verify photo output |
 | `spike_t6_office.py` | Office-printing spike (T6) — run once after installing LibreOffice |
+| `spike_t7_text.py` | Text/CSV spike (T7) — run once to verify plain-text output |
 | `allow_firewall_8000.bat` | One-click firewall rule (run as administrator, once) |
 | `.env.example` | Configuration template — copy to `.env` (never committed) |
-| `requirements.txt` | Python packages: fastapi, uvicorn, pywin32, python-multipart, pillow |
+| `requirements.txt` | Python packages: fastapi, uvicorn, pywin32, python-multipart, pillow, reportlab |
 | `requirements-dev.txt` | Dev tools: pytest, pytest-cov, httpx, ruff |
 | `pyproject.toml` | Tool config: pytest options, coverage gate (90%), ruff lint rules |
 | `.github/workflows/ci.yml` | GitHub Actions: lint + tests on every push/PR (Ubuntu) |
@@ -87,13 +88,14 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 1. Find the service PC's IP: run `ipconfig`, note the **IPv4 Address** (e.g. `192.168.1.5`). Tip: set a **DHCP reservation** for it in the router so it never changes.
 2. On the phone (same Wi-Fi): open `http://<that-ip>:8000`
-3. Pick a PDF, image (JPG/PNG/WebP), or Office document (DOCX/XLSX/PPTX/ODF)
-   → tap **Print** → watch the status:
+3. Pick a PDF, image (JPG/PNG/WebP), Office document (DOCX/XLSX/PPTX/ODF),
+   or TXT/CSV → tap **Print** → watch the status:
    `📨 Queued… → ⏳ status: queued… → 🖨️ Printed to EPSON L3210 Series!`
 4. Paper comes out. Done. Images are placed on a white A4 page, fitted and
    centered; phone-photo rotation (EXIF) is handled automatically. Office
    documents need LibreOffice on the server (§1); DOCX/XLSX/PPTX convert in
-   roughly 10–30 s — the page shows `converting` while that runs.
+   roughly 10–30 s — the page shows `converting` while that runs. TXT
+   prints as monospace text, CSV as a bordered grid table.
 
 Other endpoints (also browsable interactively at `http://<ip>:8000/docs`):
 
@@ -101,7 +103,7 @@ Other endpoints (also browsable interactively at `http://<ip>:8000/docs`):
 |---|---|
 | `GET /health` | Is the service up? First thing to check when anything seems broken |
 | `GET /printers` | Which printers Windows sees (the L3210 should be listed) |
-| `POST /print` | Upload a file (PDF, image, or Office document) and print it |
+| `POST /print` | Upload a file (PDF, image, Office document, or TXT/CSV) and print it |
 | `GET /jobs` | Recent jobs and their statuses |
 | `GET /jobs/{id}` | One job's status (what the page polls) |
 | `DELETE /jobs/{id}` | Cancel a job that hasn't printed yet |
@@ -136,7 +138,7 @@ python spike_print_test.py
 
 It reports: printer visibility (T1), spooler acceptance (T2), Windows print-verb (T3), SumatraPDF (T4) — with a summary and "what to do with this result" guidance. **T4 passing + paper = the whole chain works.** See SOURCE_OF_TRUTH Section 5 for the recorded results that decided the current design.
 
-For the multi-format work, `spike_t5_images.py` (images) and `spike_t6_office.py` (DOCX/XLSX/PPTX after installing LibreOffice) run the same kind of hardware check for the newer formats — each converts test files with the service's real processors, prints them, and gives you a paper checklist. Their results are the phases' acceptance gates — see `docs/MULTI_FORMAT_PLAN.md` §14.
+For the multi-format work, `spike_t5_images.py` (images), `spike_t6_office.py` (DOCX/XLSX/PPTX after installing LibreOffice) and `spike_t7_text.py` (TXT/CSV) run the same kind of hardware check for the newer formats — each converts test files with the service's real processors, prints them, and gives you a paper checklist. Their results are the phases' acceptance gates — see `docs/MULTI_FORMAT_PLAN.md` §14.
 
 ---
 

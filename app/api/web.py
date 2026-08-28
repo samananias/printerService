@@ -55,10 +55,10 @@ PAGE = """<!DOCTYPE html>
 <body>
 <div class="card">
   <h1>🖨️ Printer Service</h1>
-  <p class="sub">Pick a PDF, image, or Office document and send it to the printer.</p>
+  <p class="sub">Pick a PDF, image, Office, or text file and send it to the printer.</p>
 
   <input type="file" id="file"
-         accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp">
+         accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp,.txt,.csv">
   <input type="password" id="pin" placeholder="PIN (only if the server set one)">
   <button id="printBtn" onclick="sendPrint()">Print</button>
   <div id="result"></div>
@@ -74,6 +74,7 @@ const OK_TYPES = [
   ".pdf", ".jpg", ".jpeg", ".png", ".webp",
   ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
   ".odt", ".ods", ".odp",
+  ".txt", ".csv",
 ];
 
 function show(text, cls) {
@@ -87,8 +88,8 @@ async function sendPrint() {
 
   if (!file) { show("Pick a file first.", "err"); return; }
   if (!OK_TYPES.some(ext => file.name.toLowerCase().endsWith(ext))) {
-    show("That file type isn't supported yet — PDF, images, or Office "
-         + "documents (DOCX/XLSX/PPTX).", "err");
+    show("That file type isn't supported yet — PDF, images, Office "
+         + "documents, or TXT/CSV.", "err");
     return;
   }
 

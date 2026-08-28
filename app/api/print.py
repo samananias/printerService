@@ -12,8 +12,9 @@ is now format-agnostic (docs/MULTI_FORMAT_PLAN.md §8):
   2. validate_upload() applies the Section 8 checks (type, content,
      availability, size) and returns the detected category. A category
      prints once its processor is registered AND available on this
-     machine (PDF and images always; office additionally needs LibreOffice
-     installed / ENABLE_OFFICE=1). Refusals explain which gate fired.
+     machine (PDF, images and text always; office additionally needs
+     LibreOffice installed / ENABLE_OFFICE=1). Refusals explain which
+     gate fired.
   3. save_upload() stores the bytes under a unique job id, keeping the
      real extension.
   4. The job is registered (category recorded) and handed to the

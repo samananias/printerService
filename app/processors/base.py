@@ -14,6 +14,27 @@ app/processors/__init__.py — the pipeline never changes.
 from pathlib import Path
 from typing import Protocol
 
+from app.config import PAPER_SIZE
+
+# Shared page geometry (points; 1 pt = 1/72"). Processors that AUTHOR pages
+# (images, text) lay their content out on this size; unknown/empty
+# PAPER_SIZE falls back to A4. Add entries (e.g. long bond 8.5x13) as later
+# phases need them.
+PAGE_SIZES_PT = {
+    "a3": (842, 1191),
+    "a4": (595, 842),
+    "a5": (420, 595),
+    "letter": (612, 792),
+    "legal": (612, 1008),
+}
+DEFAULT_PAGE = "a4"
+
+
+def page_size_pt() -> tuple[int, int]:
+    """The page authored content sits on: PAPER_SIZE when it names a known
+    size, A4 otherwise (a page must be concrete before anything fits on it)."""
+    return PAGE_SIZES_PT.get(PAPER_SIZE.strip().lower(), PAGE_SIZES_PT[DEFAULT_PAGE])
+
 
 class ConversionError(Exception):
     """Raised with a human-readable reason when a file cannot be converted.

@@ -12,9 +12,10 @@ upright, nothing clipped) is spike T5's job on real hardware.
 import pytest
 from PIL import Image
 
+from app.processors import base as processor_base
 from app.processors import images
-from app.processors.base import ConversionError
-from app.processors.images import MAX_UPSCALE, ImageProcessor, layout, page_size_pt
+from app.processors.base import ConversionError, page_size_pt
+from app.processors.images import MAX_UPSCALE, ImageProcessor, layout
 
 A4_PT = (595, 842)
 
@@ -47,11 +48,11 @@ class TestLayout:
 class TestPageSize:
     def test_empty_and_unknown_config_fall_back_to_a4(self, monkeypatch):
         for value in ("", "bogus"):
-            monkeypatch.setattr(images, "PAPER_SIZE", value)
+            monkeypatch.setattr(processor_base, "PAPER_SIZE", value)
             assert page_size_pt() == (595, 842)
 
     def test_known_names_are_case_insensitive(self, monkeypatch):
-        monkeypatch.setattr(images, "PAPER_SIZE", "Letter")
+        monkeypatch.setattr(processor_base, "PAPER_SIZE", "Letter")
         assert page_size_pt() == (612, 792)
 
 

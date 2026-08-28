@@ -5,13 +5,15 @@ format category (its magic signatures already live in app/detection.py).
 A category without a registration is detected but refused at upload time;
 a REGISTERED processor can still be per-machine unavailable (the office
 kill switch, LibreOffice missing) — that's what Processor.available() is
-for (docs/MULTI_FORMAT_PLAN.md §10).
+for (docs/MULTI_FORMAT_PLAN.md §10). All four MVP categories are
+registered as of Phase 4.
 """
 
 from app.processors.base import ConversionError, Processor
 from app.processors.images import IMAGE_PROCESSOR
 from app.processors.office import OFFICE_PROCESSOR
 from app.processors.pdf import PDF_PROCESSOR
+from app.processors.text import TEXT_PROCESSOR
 
 __all__ = [
     "ConversionError",
@@ -24,6 +26,7 @@ _REGISTRY: dict[str, Processor] = {
     "image": IMAGE_PROCESSOR,
     "office": OFFICE_PROCESSOR,
     "pdf": PDF_PROCESSOR,
+    "text": TEXT_PROCESSOR,
 }
 
 

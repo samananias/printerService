@@ -120,6 +120,33 @@ class TestPrintHappyPath:
             message="office job's temp files should be deleted",
         )
 
+    def test_txt_upload_prints_via_the_real_text_renderer(
+        self, client, mock_print, tmp_upload_dir, wait_for_status, wait_until
+    ):
+        # No mocking needed: reportlab is a Python library, so this runs
+        # the REAL conversion inside the API flow.
+        content = "hello from the phone\nline two with more text\n" * 10
+        response = client.post(
+            "/print", files={"file": ("notes.txt", content.encode(), "text/plain")}
+        )
+
+        assert response.status_code == 201
+        job_id = response.json()["job_id"]
+
+        job = wait_for_status(job_id, "done")
+        assert job.format == "text"
+
+        # The engine only ever sees a PDF named <job_id>.pdf. Its CONTENT
+        # can't be read here — cleanup deletes it right after "done" — the
+        # unit tests assert the rendered bytes.
+        assert mock_print.pdf_path.suffix == ".pdf"
+        assert mock_print.pdf_path.name == f"{job_id}.pdf"
+
+        wait_until(
+            lambda: not list(tmp_upload_dir.glob(f"{job_id}.*")),
+            message="text job's temp files should be deleted",
+        )
+
 
 class TestPrintRejections:
     """Section 13 test #8 — bad files must be refused before printing."""

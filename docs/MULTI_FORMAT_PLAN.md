@@ -211,6 +211,9 @@ AV scanning — ⚪ v2+ options.
   python-pptx` spike-only) — this phase's acceptance gate.
 - **Phase 4 (p13) — text/CSV:** reportlab renderer — TXT = monospace text
   with wrap; CSV = bordered grid with row/col caps + "truncated" notice.
+  Code landed in p13 (all four MVP categories now registered). Physical
+  check pending T7 (`spike_t7_text.py`) — with T5/T6 this completes the
+  MVP's paper verification.
 - **Phase 5 (p14) — queue management:** cancel while queued/converting;
   spooler purge via `win32print.SetJob` once printed; retry failed jobs;
   SQLite persistence (SOURCE_OF_TRUTH §12 upgrade path) + startup recovery.

@@ -25,33 +25,15 @@ from pathlib import Path
 
 from PIL import Image, ImageOps, ImageSequence
 
-from app.config import PAPER_SIZE
-from app.processors.base import ConversionError
+from app.processors.base import ConversionError, page_size_pt
 
 logger = logging.getLogger(__name__)
-
-# Page sizes in points (1 pt = 1/72"). Unknown/empty PAPER_SIZE falls back
-# to A4. Add entries (e.g. long bond 8.5x13) as later phases need them.
-PAGE_SIZES_PT = {
-    "a3": (842, 1191),
-    "a4": (595, 842),
-    "a5": (420, 595),
-    "letter": (612, 792),
-    "legal": (612, 1008),
-}
-DEFAULT_PAGE = "a4"
 
 MARGIN_PT = 36    # 0.5" — this printer cannot print borderless anyway
 MAX_DPI = 300     # above ~300 effective DPI, extra pixels are invisible on paper
 SOURCE_DPI = 96   # small images are assumed ~96 DPI (the web/phone norm)...
 MAX_UPSCALE = MAX_DPI / SOURCE_DPI  # ...so upscaling stops at 300 effective DPI
 MAX_FRAMES = 10   # an animated WebP/scan-batch TIFF is not a 50-page print job
-
-
-def page_size_pt() -> tuple[int, int]:
-    """The page images are laid out on: PAPER_SIZE when it names a known
-    size, A4 otherwise (images always need a concrete page to sit on)."""
-    return PAGE_SIZES_PT.get(PAPER_SIZE.strip().lower(), PAGE_SIZES_PT[DEFAULT_PAGE])
 
 
 def layout(

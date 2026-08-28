@@ -101,11 +101,21 @@ class TestValidateUpload:
             validate_upload("invoice.docx", make_docx_bytes())
         assert exc_info.value.status_code == 415
 
-    def test_detected_but_unregistered_format_refused_until_its_phase(self):
-        # Text has no processor yet (Phase 4): detected via extension,
-        # refused until then.
+    def test_text_files_are_now_printable(self):
+        # Phase 4 registered the text processor; text has no magic bytes,
+        # so the extension is the trusted signal here (detection.py).
+        assert validate_upload("notes.txt", b"just some plain text content") == "text"
+        assert validate_upload("data.csv", b"a,b,c\n1,2,3") == "text"
+
+    def test_unregistered_category_refused_until_its_phase(self, monkeypatch):
+        # All current categories are registered, so the "later phase" gate
+        # has no natural case left — simulate a future category whose
+        # processor isn't registered yet to keep the branch honest.
+        monkeypatch.setattr(
+            "app.services.uploads.for_category", lambda category: None
+        )
         with pytest.raises(UploadError, match="later phase") as exc_info:
-            validate_upload("notes.txt", b"just some plain text content here")
+            validate_upload("notes.txt", b"just some plain text content")
         assert exc_info.value.status_code == 415
 
     def test_no_filename_and_unknown_content_is_unsupported(self):
