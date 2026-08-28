@@ -19,6 +19,7 @@ Concept map (README Section 15):
 Phase status (SOURCE_OF_TRUTH Section 9):
   P2: GET /health  ✅ done
   P4: POST /print upload endpoint (app/api/print.py)  ✅ done
+  P6: mobile web page (app/api/web.py, GET /)  ✅ done
   P5: upload handler calls app/printer/ to submit real print jobs
 """
 
@@ -27,6 +28,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.api.print import router as print_router
+from app.api.web import router as web_router
 from app.services.uploads import sweep_stale_uploads
 
 
@@ -56,16 +58,6 @@ app = FastAPI(
 app.include_router(print_router)
 
 
-@app.get("/")
-def root():
-    """Tiny landing page so a browser visit to http://<ip>:8000 shows something."""
-    return {
-        "service": "printer-service",
-        "status": "running",
-        "hint": "open /health to check reachability, /docs for interactive API docs",
-    }
-
-
 @app.get("/health")
 def health():
     """First thing to check when anything seems broken (SOURCE_OF_TRUTH Section 11).
@@ -74,4 +66,9 @@ def health():
     reachable?", nothing more.
     """
     return {"status": "ok"}
+
+
+# GET / serves the mobile web page (Option B): on the phone you open the
+# server's address and get a file-picker UI instead of raw JSON.
+app.include_router(web_router)
 
