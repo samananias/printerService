@@ -309,6 +309,14 @@ This is a home-lab project, so the goal is **sensible defaults**, not enterprise
 - Basic queue management if multiple jobs arrive close together.
 - Logging, and automatic cleanup of temp files.
 
+### Multi-Format Printing (current stage — p10 onward)
+The service grows from PDF-only to a general multi-format print service
+(images, office documents, text/CSV) with PDF as the one internal print
+format and SumatraPDF kept as the print engine. The full investigation,
+decision record, phased roadmap and spike protocol (T5–T7) live in
+[MULTI_FORMAT_PLAN.md](MULTI_FORMAT_PLAN.md); its hardware spikes extend
+Section 5's T1–T4 convention before any new format prints real paper.
+
 ---
 
 ## 10. Project Folder Structure 🔵
