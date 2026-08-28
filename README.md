@@ -3,8 +3,9 @@
 [![CI](https://github.com/samananias/printerService/actions/workflows/ci.yml/badge.svg)](https://github.com/samananias/printerService/actions/workflows/ci.yml)
 
 **Project:** Android phone → Wi-Fi → Python service (this PC) → Windows print queue → USB → Epson L3210
-**Status:** ✅ **MVP working end-to-end** — a phone upload prints real paper. ✅ Logic verified automatically: pytest suite + ruff lint run in CI on every push.
+**Status:** ✅ **PDF MVP working end-to-end** (phone → service → paper, spike T4). ✅ **Multi-format code-complete** (p10–p13: JPG/PNG/WebP images, DOCX/XLSX/PPTX/ODF office, TXT/CSV — office needs LibreOffice installed, otherwise it's refused with a clear message). ✅ 193 automated tests (~97 % coverage) + ruff + CI verify the logic on every push. 🔴 The new formats' paper checks (spikes T5/T6/T7) are still pending — run them on the print-server PC before trusting the output; scripts and instructions in `docs/MULTI_FORMAT_PLAN.md` §14.
 **Full design document:** [docs/SOURCE_OF_TRUTH.md](docs/SOURCE_OF_TRUTH.md) — architecture, concepts, roadmap, testing plan. If it disagrees with this file, it wins.
+**Multi-format roadmap & exact stopping point:** [docs/MULTI_FORMAT_PLAN.md](docs/MULTI_FORMAT_PLAN.md) ("Where this stage stopped") and [docs/SOURCE_OF_TRUTH.md](docs/SOURCE_OF_TRUTH.md) §9.
 
 ---
 

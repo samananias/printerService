@@ -10,6 +10,37 @@ Claims are tagged like SOURCE_OF_TRUTH:
 
 ---
 
+## 0. Where this stage stopped (2026-08-29)
+
+**Code: complete through Phase 4. Paper verification: not started.**
+
+- 🟢 **Done and committed** on `multiple-types-compatibility` (local only,
+  not pushed): `56afce6` (this roadmap) → `d078d41` **p10** groundwork
+  (detection + processor registry + generalized uploads + conversion
+  lock) → `b928e11` **p11** images → `19a7223` **p12** office →
+  `0be3eab` **p13** text/CSV. All four MVP categories are registered;
+  193 automated tests pass at ≈97 % coverage (gate 90 %); ruff clean.
+  Office uploads currently return the kill-switch 415 because LibreOffice
+  is not installed — that is the designed behavior, not a bug.
+- 🔴 **The only thing between here and "multi-format MVP verified" is
+  Phase 0's hardware spikes**, run on the print-server PC in one sitting:
+  1. `git pull` && `.venv\Scripts\pip install -r requirements.txt` &&
+     restart the service && one real PDF print from the phone (regression).
+  2. `python spike_t5_images.py --paper A4` (also verifies the driver
+     honors `-print-settings`).
+  3. Install LibreOffice, then `python spike_t6_office.py`.
+  4. `python spike_t7_text.py`.
+  Record results in SOURCE_OF_TRUTH §5 (T4 style).
+- 🟡 **Config note:** `PAPER_SIZE` ships empty (the driver chooses paper —
+  the T4-proven behavior). Set e.g. `PAPER_SIZE=A4` only after T5's
+  `--paper A4` copy looks right.
+- ⚪ **Phases 5–7 are NOT started** — §10 below describes them as designed
+  (queue management, reliability, print options UI), not as built.
+- Housekeeping: the branch has not been pushed; CI has therefore not run
+  on p10–p13 yet.
+
+---
+
 ## 1. Executive summary — the 10 answers
 
 | # | Question | Decision |
@@ -306,10 +337,16 @@ cut off at the right margin.
 
 ## 15. Open items
 
-- [ ] Run T5/T6/T7 on the real print-server PC; record results in
-      SOURCE_OF_TRUTH §5.
-- [ ] Confirm the target PC's Windows version before Phase 3 (pin LO 7.6.x
-      if Win 7/8.1).
-- [ ] Phase 2: verify cancel cleanup covers non-PDF extensions.
-- [ ] Phase 7: verify long-bond paper on the Epson driver (custom mm size
-      vs driver paper name).
+- [x] Phase 1 refactor (p10), images (p11), office (p12), text/CSV (p13) —
+      code committed on `multiple-types-compatibility` (local only).
+- [ ] Push/merge the branch so CI runs on p10–p13.
+- [ ] Run T5/T6/T7 on the real print-server PC (T6 after installing
+      LibreOffice); record results in SOURCE_OF_TRUTH §5 — the only
+      remaining gate for the multi-format MVP.
+- [ ] After T5 passes: decide whether to set `PAPER_SIZE=A4` in `.env`.
+- [ ] Confirm the target PC's Windows version before enabling office
+      (pin LibreOffice 7.6.x if it's Win 7/8.1).
+- [x] Cancel cleanup covers non-PDF extensions (centralized in
+      `uploads.delete_job_files` in p10, exercised by the API tests).
+- [ ] Phase 7: verify long-bond paper (8.5×13) on the Epson driver
+      (custom mm size vs driver paper name).
