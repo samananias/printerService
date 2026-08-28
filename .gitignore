@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Local config — never commit real values (README Section 10)
+.env
+
+# Runtime data (temp print files, logs)
+uploads/*
+!uploads/.gitkeep
+logs/*
+!logs/.gitkeep
+*.log

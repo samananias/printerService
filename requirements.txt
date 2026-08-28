@@ -1,0 +1,9 @@
+# Web layer (README Section 4)
+fastapi>=0.110
+uvicorn[standard]>=0.29
+
+# Required for file uploads — FastAPI needs it to parse multipart/form-data
+python-multipart>=0.0.9
+
+# Windows printing API (README Section 4) — Windows only
+pywin32>=306; sys_platform == "win32"
