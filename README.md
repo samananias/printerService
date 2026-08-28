@@ -1,7 +1,7 @@
 # Printer Service — Print from your Android phone, over Wi-Fi
 
 **Project:** Android phone → Wi-Fi → Python service (old PC) → USB → Epson L3210
-**Status:** 🚧 In development — reliability & PIN auth (P8) done; printing (P5) pending the printer spike. Roadmap: [docs/SOURCE_OF_TRUTH.md](docs/SOURCE_OF_TRUTH.md) Section 9.
+**Status:** 🚧 In development — printing pipeline built (P5) around SumatraPDF; end-to-end paper test pending SumatraPDF install. Roadmap: [docs/SOURCE_OF_TRUTH.md](docs/SOURCE_OF_TRUTH.md) Section 9.
 
 This file is the **quickstart**: what to check and install *before* running any setup, and how to run the project.
 The deep design document — architecture decisions, networking concepts, roadmap, testing plan, troubleshooting — lives in [**docs/SOURCE_OF_TRUTH.md**](docs/SOURCE_OF_TRUTH.md). When this README and that document disagree, that document wins.

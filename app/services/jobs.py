@@ -51,13 +51,27 @@ def list_jobs() -> list[PrintJob]:
         return list(_jobs.values())
 
 
-def update_status(job_id: str, status: str, error: str | None = None) -> None:
-    """Move a job along its lifecycle (used by Phase 5's printing code)."""
+def update_status(
+    job_id: str,
+    status: str,
+    error: str | None = None,
+    printer: str | None = None,
+) -> None:
+    """Move a job along its lifecycle (used by Phase 5's printing code).
+
+    error/printer are only written when provided; reaching 'done' clears a
+    stale error, since the job obviously succeeded.
+    """
     with _lock:
         job = _jobs.get(job_id)
         if job:
             job.status = status
-            job.error = error
+            if error is not None:
+                job.error = error
+            elif status == JobStatus.DONE:
+                job.error = None
+            if printer is not None:
+                job.printer = printer
             job.updated_at = _now()
 
 

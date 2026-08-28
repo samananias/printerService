@@ -8,8 +8,9 @@ from pydantic import BaseModel
 class PrintAccepted(BaseModel):
     """Response for POST /print.
 
-    status is "received" until Phase 5 hands the file to the Windows print
-    queue — then it becomes "queued", matching the API design in Section 11.
+    status is "queued": submission to the Windows print queue happens in a
+    background thread (app/services/pipeline.py), so the response returns
+    immediately. Poll GET /jobs/{id} to watch it move to done/failed.
     """
 
     job_id: str

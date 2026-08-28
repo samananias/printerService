@@ -22,7 +22,8 @@ Phase status (SOURCE_OF_TRUTH Section 9):
   P6: mobile web page (app/api/web.py, GET /)  ✅ done
   P7: /printers, /jobs, /jobs/{id} (GET/DELETE)  ✅ done
   P8: logging, PIN auth, error hardening  ✅ done
-  P5: upload handler calls app/printer/ to submit real print jobs
+  P5: uploads submitted to the Windows print queue via SumatraPDF  ✅ built,
+      end-to-end paper test pending SumatraPDF installation
 """
 
 from contextlib import asynccontextmanager

@@ -99,8 +99,8 @@ async function sendPrint() {
     const data = await response.json();
 
     if (response.ok) {
-      show("✅ Sent!\\njob id: " + data.job_id +
-           "\\nstatus: " + data.status, "ok");
+      show("📨 Queued!\\njob id: " + data.job_id + "\\nchecking status…", "ok");
+      poll(data.job_id, 0);
     } else if (response.status === 401) {
       show("❌ Wrong PIN.", "err");
     } else {
@@ -114,6 +114,45 @@ async function sendPrint() {
          "err");
   } finally {
     btn.disabled = false;
+  }
+}
+
+// Poll the job until it's done or failed — this is the "is my print
+// finished yet?" loop the Section 11 API was designed for.
+async function poll(jobId, attempt) {
+  if (attempt > 60) {  // ~2 minutes; spooler can be slow with big files
+    show("⏳ Still not confirmed after 2 min. Check GET /jobs/" + jobId +
+         " or the printer's queue.", "ok");
+    return;
+  }
+  try {
+    const pin = document.getElementById("pin").value.trim();
+    const headers = pin ? { "X-API-PIN": pin } : {};
+    const response = await fetch("/jobs/" + jobId, { headers });
+    if (!response.ok) {
+      show("❌ Lost track of job " + jobId + " (HTTP " + response.status + ")",
+           "err");
+      return;
+    }
+    const job = await response.json();
+    if (job.status === "done") {
+      show("🖨️ Printed to " + (job.printer || "printer") + "!\\njob " + jobId,
+           "ok");
+      return;
+    }
+    if (job.status === "failed") {
+      show("❌ Print failed: " + (job.error || "unknown reason"), "err");
+      return;
+    }
+    if (job.status === "cancelled") {
+      show("Job " + jobId + " was cancelled.", "err");
+      return;
+    }
+    show("⏳ status: " + job.status, "ok");
+    setTimeout(() => poll(jobId, attempt + 1), 2000);
+  } catch (networkError) {
+    // One dropped poll shouldn't end monitoring — keep trying.
+    setTimeout(() => poll(jobId, attempt + 1), 3000);
   }
 }
 </script>

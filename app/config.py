@@ -43,6 +43,13 @@ MAX_UPLOAD_MB = int(_get("MAX_UPLOAD_MB", "25"))
 # Section 8: optional shared PIN. Empty = auth disabled. Enforced in Phase 8.
 API_PIN = _get("API_PIN", "")
 
+# Phase 5: target printer. Empty = whatever Windows calls its default.
+PRINTER_NAME = _get("PRINTER_NAME", "")
+
+# Phase 5: explicit path to SumatraPDF.exe. If set, used as-is and nothing
+# else is tried (makes misconfiguration loud instead of silently falling back).
+SUMATRA_PATH = _get("SUMATRA_PATH", "")
+
 # Every real PDF starts with these 5 bytes — the "magic bytes" check that
 # catches renamed/fake files that a mere ".pdf" extension check would miss.
 PDF_MAGIC = b"%PDF-"

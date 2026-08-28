@@ -185,6 +185,14 @@ Scenario: **you select a PDF on your phone and press Print.**
 
 None of these should be assumed to work out of the box on your specific old PC without testing. **Action item:** in Phase 4 of the roadmap (Section 9), your first real experiment should be "can I successfully print a PDF file from Python on this exact PC, using this exact printer, by any method" before designing the rest of the pipeline around a specific technique.
 
+🟢 **SPIKE RESULT (recorded after running `spike_print_test.py`):**
+- T1 PASS — printer visible via `win32print`; target `EPSON L3210 Series` (default).
+- T2 PASS — RAW text job accepted by the spooler.
+- T3 FAIL — `WinError 1155`: no PDF application on the machine registers the Windows "print" verb. Expected on modern Windows; not a driver problem.
+- T4 SKIP — SumatraPDF was not installed at the time of the run.
+
+🔵 **Decision:** **SumatraPDF** (`SumatraPDF.exe -print-to "<printer>" -silent <file.pdf>`) is the primary PDF printing method; the print verb remains a code fallback (default printer only); PDF→image conversion is the unimplemented last resort. Implemented in `app/printer/windows.py`; submission runs in a background thread (`app/services/pipeline.py`) so `POST /print` returns `"queued"` immediately and job status moves `queued → done/failed`. **Remaining confirmation:** install SumatraPDF, re-run the spike (expect T4 PASS), then verify a real end-to-end print; re-confirm on the old PC at deploy time.
+
 ---
 
 ## 6. Android Side
@@ -473,8 +481,8 @@ This MVP deliberately has **no database, no authentication beyond "same Wi-Fi ne
 
 ## Open Items Requiring Testing (Summary)
 
-- 🔴 **Highest priority:** confirm a working method for printing a PDF specifically (not text/images) from Python via the Windows printing system on your actual PC (Section 5).
-- 🔴 Confirm `pywin32` correctly detects and can submit jobs to the specific Epson L3210 driver installed on your PC (Section 4, Section 9 Phase 4).
+- 🟢 **Resolved (spike run):** the spooler path works and the printer is detected; the Windows "print" verb has no PDF handler on the tested machine, so **SumatraPDF is the chosen PDF method** (Section 5 now records the decision). Still to confirm: T4 PASS after installing SumatraPDF, then a real end-to-end print — on this machine and again on the old PC at deploy time.
+- 🔴 Confirm `pywin32` correctly detects and can submit jobs to the specific Epson L3210 driver installed on your PC (Section 4, Section 9 Phase 4). *(Spike T1/T2 confirm detection and spooler acceptance.)*
 - 🔴 If you later pursue Option C (Android's native `PrintService` framework, Section 6), treat IPP support and the `PrintService` implementation itself as a separate research phase — do not assume it's a small extension of the MVP.
 
 ---
