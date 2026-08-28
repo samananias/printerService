@@ -8,6 +8,7 @@ of the pipeline: phone → HTTP → validated bytes on disk, intact.
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from app.models.printing import PrintAccepted
+from app.services import jobs
 from app.services.uploads import UploadError, save_upload, validate_pdf
 
 router = APIRouter()
@@ -22,6 +23,7 @@ async def print_pdf(file: UploadFile = File(...)):
       1. FastAPI/python-multipart parse the request and hand us the bytes.
       2. validate_pdf() applies the Section 8 checks (type, size).
       3. save_upload() stores them under a unique job_id in uploads/.
+      4. The job is registered in the in-memory tracker (Phase 7).
 
     Returns 201 with the job id. Errors: 415 (not a PDF), 413 (too large).
     """
@@ -33,6 +35,7 @@ async def print_pdf(file: UploadFile = File(...)):
         raise HTTPException(status_code=exc.status_code, detail=str(exc))
 
     job_id, _path = save_upload(data)
+    jobs.create_job(job_id, file.filename or "unknown.pdf", len(data), _path)
 
     return PrintAccepted(
         job_id=job_id,

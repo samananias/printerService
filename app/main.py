@@ -20,6 +20,7 @@ Phase status (SOURCE_OF_TRUTH Section 9):
   P2: GET /health  ✅ done
   P4: POST /print upload endpoint (app/api/print.py)  ✅ done
   P6: mobile web page (app/api/web.py, GET /)  ✅ done
+  P7: /printers, /jobs, /jobs/{id} (GET/DELETE)  ✅ done
   P5: upload handler calls app/printer/ to submit real print jobs
 """
 
@@ -27,7 +28,9 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.api.jobs import router as jobs_router
 from app.api.print import router as print_router
+from app.api.printers import router as printers_router
 from app.api.web import router as web_router
 from app.services.uploads import sweep_stale_uploads
 
@@ -71,4 +74,6 @@ def health():
 # GET / serves the mobile web page (Option B): on the phone you open the
 # server's address and get a file-picker UI instead of raw JSON.
 app.include_router(web_router)
+app.include_router(printers_router)
+app.include_router(jobs_router)
 
