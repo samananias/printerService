@@ -197,8 +197,10 @@ AV scanning — ⚪ v2+ options.
   detection + Processor layer + generalized uploads + conversion lock +
   `converting`/`printing` states; all tests stay green.
 - **Phase 2 (p11) — images:** Pillow processor; web page accept/copy;
-  `PAPER_SIZE` wiring; cancel cleanup must delete `<job_id>.<ext>` too
-  (`uploads.delete_job_files`).
+  `PAPER_SIZE` wiring (default empty = driver chooses, per the de-risking
+  decision); cancel cleanup must delete `<job_id>.<ext>` too
+  (`uploads.delete_job_files`). Code landed in p11 — physical check pending
+  T5 (`spike_t5_images.py`), which is this phase's acceptance gate.
 - **Phase 3 (p12) — office:** install LibreOffice (run T6 first);
   `office.py` adapter (timeout, taskkill, profile isolation,
   `ENABLE_OFFICE` kill switch); friendly error mapping; font-pack docs;

@@ -3,7 +3,9 @@ GET / — the mobile web page (Phase 6, SOURCE_OF_TRUTH Section 6 "Option B").
 
 The page is a single self-contained HTML string (inline CSS + vanilla JS —
 no build tools, no frameworks) served directly by FastAPI. The phone's
-browser IS the app: open http://<server-ip>:8000, pick a PDF, tap Print.
+browser IS the app: open http://<server-ip>:8000, pick a PDF or image, tap
+Print. The accept list mirrors the categories registered in
+app/processors — new formats update both.
 
 How the upload works (worth reading slowly — this is HTTP from the browser's
 point of view):
@@ -53,9 +55,9 @@ PAGE = """<!DOCTYPE html>
 <body>
 <div class="card">
   <h1>🖨️ Printer Service</h1>
-  <p class="sub">Pick a PDF and send it to the printer.</p>
+  <p class="sub">Pick a PDF or an image and send it to the printer.</p>
 
-  <input type="file" id="file" accept=".pdf,application/pdf">
+  <input type="file" id="file" accept=".pdf,.jpg,.jpeg,.png,.webp">
   <input type="password" id="pin" placeholder="PIN (only if the server set one)">
   <button id="printBtn" onclick="sendPrint()">Print</button>
   <div id="result"></div>
@@ -64,6 +66,10 @@ PAGE = """<!DOCTYPE html>
 <script>
 const btn = document.getElementById("printBtn");
 const resultDiv = document.getElementById("result");
+
+// Client-side convenience only — the server re-checks everything
+// (extension allowlist + magic bytes) and never trusts the browser.
+const OK_TYPES = [".pdf", ".jpg", ".jpeg", ".png", ".webp"];
 
 function show(text, cls) {
   resultDiv.textContent = text;
@@ -74,9 +80,10 @@ async function sendPrint() {
   const fileInput = document.getElementById("file");
   const file = fileInput.files[0];
 
-  if (!file) { show("Pick a PDF first.", "err"); return; }
-  if (!file.name.toLowerCase().endsWith(".pdf")) {
-    show("That doesn't look like a PDF file.", "err");
+  if (!file) { show("Pick a file first.", "err"); return; }
+  if (!OK_TYPES.some(ext => file.name.toLowerCase().endsWith(ext))) {
+    show("That file type isn't supported yet — PDF or JPG/PNG/WebP images.",
+         "err");
     return;
   }
 

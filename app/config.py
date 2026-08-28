@@ -61,9 +61,12 @@ PDF_MAGIC = b"%PDF-"
 # phase that needs it (images p11, office p12, print options v2).
 # ------------------------------------------------------------------
 
-# Paper size passed to SumatraPDF's -print-settings once non-PDF formats
-# reach the printer (Phase 2). Examples: A4, letter, legal.
-PAPER_SIZE = _get("PAPER_SIZE", "A4")
+# Paper size sent to the driver via SumatraPDF's -print-settings
+# ("paper=<X>,fit"). Empty (default) = no print-settings flag at all — the
+# driver chooses the paper, which is the exact behavior spike T4 proved on
+# real paper. Opt in (e.g. A4) only after spike T5 confirmed this driver
+# honors the flag. Images are also laid out on this size (A4 when empty).
+PAPER_SIZE = _get("PAPER_SIZE", "")
 
 # Office conversion (Phase 3): LibreOffice Headless. ENABLE_OFFICE is the
 # kill switch for the old PC — 0 turns office formats off without

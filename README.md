@@ -17,9 +17,10 @@
 | `tests/` | pytest suite — unit tests (OS boundaries faked) + API tests via TestClient |
 | `tests/conftest.py` | Shared fixtures: fresh job store, temp `uploads/`, fake `win32print`, print mock |
 | `spike_print_test.py` | Standalone printer diagnostic — run it when printing misbehaves |
+| `spike_t5_images.py` | Image-printing spike (T5) — run once at the printer to verify photo output |
 | `allow_firewall_8000.bat` | One-click firewall rule (run as administrator, once) |
 | `.env.example` | Configuration template — copy to `.env` (never committed) |
-| `requirements.txt` | Python packages: fastapi, uvicorn, pywin32, python-multipart |
+| `requirements.txt` | Python packages: fastapi, uvicorn, pywin32, python-multipart, pillow |
 | `requirements-dev.txt` | Dev tools: pytest, pytest-cov, httpx, ruff |
 | `pyproject.toml` | Tool config: pytest options, coverage gate (90%), ruff lint rules |
 | `.github/workflows/ci.yml` | GitHub Actions: lint + tests on every push/PR (Ubuntu) |
@@ -84,9 +85,10 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 1. Find the service PC's IP: run `ipconfig`, note the **IPv4 Address** (e.g. `192.168.1.5`). Tip: set a **DHCP reservation** for it in the router so it never changes.
 2. On the phone (same Wi-Fi): open `http://<that-ip>:8000`
-3. Pick a PDF → tap **Print** → watch the status:
+3. Pick a PDF or an image (JPG/PNG/WebP) → tap **Print** → watch the status:
    `📨 Queued… → ⏳ status: queued… → 🖨️ Printed to EPSON L3210 Series!`
-4. Paper comes out. Done.
+4. Paper comes out. Done. Images are placed on a white A4 page, fitted and
+   centered; phone-photo rotation (EXIF) is handled automatically.
 
 Other endpoints (also browsable interactively at `http://<ip>:8000/docs`):
 
@@ -94,7 +96,7 @@ Other endpoints (also browsable interactively at `http://<ip>:8000/docs`):
 |---|---|
 | `GET /health` | Is the service up? First thing to check when anything seems broken |
 | `GET /printers` | Which printers Windows sees (the L3210 should be listed) |
-| `POST /print` | Upload a PDF and print it |
+| `POST /print` | Upload a file (PDF, or JPG/PNG/WebP image) and print it |
 | `GET /jobs` | Recent jobs and their statuses |
 | `GET /jobs/{id}` | One job's status (what the page polls) |
 | `DELETE /jobs/{id}` | Cancel a job that hasn't printed yet |
@@ -111,6 +113,7 @@ Copy `.env.example` → `.env` and edit. All values are optional; defaults work.
 | `API_PIN` | *(empty)* | If set, printing/cancelling requires the PIN (sent as `X-API-PIN`; the web page has a PIN field). Empty = no auth |
 | `PRINTER_NAME` | *(empty)* | Target printer. Empty = Windows' default printer |
 | `SUMATRA_PATH` | *(empty)* | Explicit path to `SumatraPDF.exe`. Empty = search standard locations. If set, used as-is (misconfiguration fails loudly) |
+| `PAPER_SIZE` | *(empty)* | Paper size sent to the driver (`paper=<X>,fit` via SumatraPDF, e.g. `A4`). Empty = the driver chooses — the spike-proven default. Images are laid out on A4 when empty |
 | `HOST`, `PORT` | `8000` | Informational — actually pass them on the uvicorn command line (§3) |
 
 ---
@@ -124,6 +127,8 @@ python spike_print_test.py
 ```
 
 It reports: printer visibility (T1), spooler acceptance (T2), Windows print-verb (T3), SumatraPDF (T4) — with a summary and "what to do with this result" guidance. **T4 passing + paper = the whole chain works.** See SOURCE_OF_TRUTH Section 5 for the recorded results that decided the current design.
+
+For the multi-format work, `spike_t5_images.py` runs the same kind of hardware check for image printing (converts test images with the service's real processor, prints them, and gives you a paper checklist). Its results are the Phase 2 acceptance gate — see `docs/MULTI_FORMAT_PLAN.md` §14.
 
 ---
 
@@ -176,6 +181,7 @@ pytest                                # the suite + coverage report (fails below
 
 ## Where to Go Next
 
+- **Multi-format roadmap & decisions** → [docs/MULTI_FORMAT_PLAN.md](docs/MULTI_FORMAT_PLAN.md) (phases, format table, spike protocol)
 - **Roadmap & current phase** → [docs/SOURCE_OF_TRUTH.md](docs/SOURCE_OF_TRUTH.md) Section 9
 - **Why it's built this way** → Sections 3–8 there (protocol choice, tech stack, security, scope)
 - **API design** → Section 11 · **Testing plan + how the automated suite fits in** → Section 13

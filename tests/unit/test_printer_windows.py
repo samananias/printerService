@@ -91,6 +91,7 @@ class TestSubmitPdfSumatraPath:
     ):
         pdf = tmp_path / "doc.pdf"
         pdf.write_bytes(b"%PDF-")
+        monkeypatch.setattr(windows, "PAPER_SIZE", "")  # hermetic: no print settings
         monkeypatch.setattr(windows, "find_sumatra", lambda: "C:/SumatraPDF.exe")
 
         method, printer = windows.submit_pdf(pdf)
@@ -137,6 +138,36 @@ class TestSubmitPdfSumatraPath:
 
         with pytest.raises(RuntimeError, match="printer offline"):
             windows.submit_pdf(tmp_path / "doc.pdf")
+
+
+class TestPrintSettings:
+    """PAPER_SIZE is opt-in (docs/MULTI_FORMAT_PLAN.md §13 assumption #3):
+    empty = no print-settings flag at all, the driver chooses the paper —
+    the exact command spike T4 proved on real paper."""
+
+    def test_set_paper_size_adds_the_print_settings_flag(
+        self, fake_win32print, tmp_path, monkeypatch, recorded_run
+    ):
+        pdf = tmp_path / "doc.pdf"
+        pdf.write_bytes(b"%PDF-")
+        monkeypatch.setattr(windows, "PAPER_SIZE", "A4")
+        monkeypatch.setattr(windows, "find_sumatra", lambda: "C:/SumatraPDF.exe")
+
+        windows.submit_pdf(pdf)
+
+        cmd = recorded_run["cmd"]
+        assert cmd[3:5] == ["-print-settings", "paper=A4,fit"]
+        assert cmd[5:] == ["-silent", str(pdf)]  # file still last, -silent still present
+
+    def test_empty_paper_size_sends_no_print_settings(
+        self, fake_win32print, tmp_path, monkeypatch, recorded_run
+    ):
+        monkeypatch.setattr(windows, "PAPER_SIZE", "")
+        monkeypatch.setattr(windows, "find_sumatra", lambda: "C:/SumatraPDF.exe")
+
+        windows.submit_pdf(tmp_path / "doc.pdf")
+
+        assert "-print-settings" not in recorded_run["cmd"]
 
 
 # ---------------------------------------------------------------------------

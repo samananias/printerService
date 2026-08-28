@@ -29,7 +29,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from app.config import PRINTER_NAME, SUMATRA_PATH
+from app.config import PAPER_SIZE, PRINTER_NAME, SUMATRA_PATH
 from app.models.printing import PrinterInfo
 
 logger = logging.getLogger(__name__)
@@ -89,8 +89,16 @@ def submit_pdf(pdf_path: Path, printer_name: str | None = None) -> tuple[str, st
     sumatra = find_sumatra()
     if sumatra:
         logger.info("printing %s via SumatraPDF to %r", pdf_path.name, printer_name)
+        cmd = [sumatra, "-print-to", printer_name]
+        if PAPER_SIZE:
+            # Opt-in paper pinning (PAPER_SIZE in .env). Empty = no print
+            # settings at all — the driver chooses, which is the exact
+            # behavior spike T4 proved on real paper. "fit" scales content
+            # instead of clipping it when page and paper disagree.
+            cmd += ["-print-settings", f"paper={PAPER_SIZE},fit"]
+        cmd += ["-silent", str(pdf_path)]
         result = subprocess.run(
-            [sumatra, "-print-to", printer_name, "-silent", str(pdf_path)],
+            cmd,
             capture_output=True,
             timeout=180,
         )
