@@ -37,19 +37,18 @@ from app.api.web import router as web_router
 from app.services.logging_setup import setup_logging
 from app.services.uploads import sweep_stale_uploads
 
-# Configure logging before anything else logs (including our own startup).
-setup_logging()
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Runs once at startup and once at shutdown.
 
-    Startup: sweep uploads/ of files left behind by a previous run — the
-    temp-file hygiene SOURCE_OF_TRUTH Section 8 asks for. (Phase 5 will also
-    delete each file right after it's printed; the sweep is the safety net
-    for crashes.)
+    Startup: configure logging, then sweep uploads/ of files left behind by
+    a previous run — the temp-file hygiene SOURCE_OF_TRUTH Section 8 asks
+    for. (Phase 5 also deletes each file right after it's printed; the sweep
+    is the safety net for crashes.)
     """
+    setup_logging()
+
     removed = sweep_stale_uploads()
     if removed:
         print(f"[startup] swept {removed} stale upload(s) from a previous run")

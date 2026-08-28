@@ -1,0 +1,25 @@
+# Configuration for the DEVELOPMENT TOOLS (pytest, coverage, ruff).
+# Nothing here affects how the service runs in production — it only changes
+# how tests and checks behave when you (or GitHub Actions) run them.
+
+[tool.pytest.ini_options]
+# "pythonpath" lets tests do `import app...` even though this repo is not an
+# installed package: it puts the project root on Python's import path.
+testpaths = ["tests"]
+pythonpath = ["."]
+# Gate chosen below the measured 95% so genuinely untested code fails CI,
+# while normal day-to-day churn doesn't. Raise it as coverage improves.
+addopts = "--cov=app --cov-report=term-missing --cov-fail-under=90"
+
+[tool.coverage.run]
+source = ["app"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+# E/W = pycodestyle (style errors), F = pyflakes (real bugs: unused imports,
+# undefined names), I = import ordering. `ruff format` is deliberately NOT
+# enforced — lint only, so the working MVP never gets reformatted wholesale.
+select = ["E", "F", "W", "I"]

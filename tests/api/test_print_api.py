@@ -1,0 +1,96 @@
+"""API tests for POST /print — the core flow (Section 13 test #3).
+
+Every test here uses the mock_print fixture: on a Windows dev box the real
+windows.submit_pdf would find the real SumatraPDF and print actual paper.
+With the mock, the background thread still runs, so the tests observe the
+full lifecycle (201 → background thread → done, file deleted) through the
+Event it signals.
+"""
+
+
+ONE_MB = 1024 * 1024
+
+
+def post_pdf(client, data, name="report.pdf", **kwargs):
+    files = {"file": (name, data, "application/pdf")}
+    return client.post("/print", files=files, **kwargs)
+
+
+class TestPrintHappyPath:
+    def test_upload_returns_201_with_queued_job(self, client, pdf_bytes, mock_print):
+        response = post_pdf(client, pdf_bytes)
+
+        assert response.status_code == 201
+        body = response.json()
+        assert body["status"] == "queued"
+        assert body["filename"] == "report.pdf"
+        assert body["size_bytes"] == len(pdf_bytes)
+        assert body["job_id"]  # non-empty id the phone will poll
+
+    def test_job_reaches_done_and_temp_file_is_deleted(
+        self, client, pdf_bytes, mock_print, tmp_upload_dir, wait_for_status, wait_until
+    ):
+        job_id = post_pdf(client, pdf_bytes).json()["job_id"]
+
+        job = wait_for_status(job_id, "done")
+        assert job.printer  # the printer that accepted it is recorded
+
+        # The unlink happens just after the status flips to done — wait for it.
+        wait_until(
+            lambda: not (tmp_upload_dir / f"{job_id}.pdf").exists(),
+            message="printed job's temp file should be deleted",
+        )
+
+
+class TestPrintRejections:
+    """Section 13 test #8 — bad files must be refused before printing."""
+
+    def test_non_pdf_extension_rejected_with_415(self, client, pdf_bytes, mock_print):
+        response = post_pdf(client, pdf_bytes, name="virus.exe")
+        assert response.status_code == 415
+        assert "pdf" in response.json()["detail"].lower()
+
+    def test_renamed_text_file_rejected_by_magic_bytes(
+        self, client, mock_print
+    ):
+        response = post_pdf(client, b"definitely not a pdf", name="fake.pdf")
+        assert response.status_code == 415
+
+    def test_oversized_file_rejected_with_413(self, client, monkeypatch, mock_print):
+        monkeypatch.setattr("app.services.uploads.MAX_UPLOAD_MB", 1)
+        response = post_pdf(client, b"%PDF-" + b"x" * ONE_MB, name="big.pdf")
+        assert response.status_code == 413
+
+    def test_rejected_files_never_reach_the_store(self, client, mock_print, tmp_upload_dir):
+        post_pdf(client, b"not a pdf", name="fake.pdf")
+        assert mock_print.called.is_set() is False  # no print attempted
+        assert list(tmp_upload_dir.glob("*.pdf")) == []  # nothing stored
+
+
+class TestPrintErrors:
+    def test_disk_failure_returns_500(self, client, pdf_bytes, monkeypatch, mock_print):
+        def broken_save(data):
+            raise OSError("disk full")
+
+        monkeypatch.setattr("app.api.print.save_upload", broken_save)
+        response = post_pdf(client, pdf_bytes)
+        assert response.status_code == 500
+        assert "disk full" in response.json()["detail"]
+
+
+class TestPrintAuth:
+    def test_pin_enforced_on_upload_when_configured(
+        self, client, pdf_bytes, monkeypatch, mock_print
+    ):
+        monkeypatch.setattr("app.services.auth.API_PIN", "1234")
+
+        no_header = post_pdf(client, pdf_bytes)
+        wrong_pin = post_pdf(client, pdf_bytes, headers={"X-API-PIN": "0000"})
+        correct = post_pdf(client, pdf_bytes, headers={"X-API-PIN": "1234"})
+
+        assert no_header.status_code == 401
+        assert wrong_pin.status_code == 401
+        assert correct.status_code == 201
+
+    def test_upload_open_when_no_pin_configured(self, client, pdf_bytes, mock_print):
+        assert post_pdf(client, pdf_bytes).status_code == 201

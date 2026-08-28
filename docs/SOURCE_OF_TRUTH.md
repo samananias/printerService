@@ -1,7 +1,7 @@
 # Printer Service — Source of Truth
 
 **Project:** Android → Network → Python Service → USB → Epson L3210
-**Status:** ✅ MVP working end-to-end (spike T4 PASS: real page printed via SumatraPDF; phone → service → paper verified). Living document. Update this file whenever a decision changes.
+**Status:** ✅ MVP working end-to-end (spike T4 PASS: real page printed via SumatraPDF; phone → service → paper verified). ✅ Automated test suite (90 tests, 95%+ coverage gate) + ruff lint + GitHub Actions CI — service *logic* is verified on every push; hardware is verified by the spike on the real PC. Living document. Update this file whenever a decision changes.
 **Audience:** Beginner learning networking, servers, and Python.
 **Quickstart & pre-setup checklist:** see the root [README.md](../README.md).
 
@@ -126,6 +126,9 @@ Android App / Browser
 | **USB libraries** (e.g. `pyusb`) | Let Python talk to raw USB devices directly, bypassing the OS printing stack entirely. | 🔴 **Deliberately avoided.** Per your own constraint (#12) and general good practice, we let Windows' driver handle USB communication. Talking to a printer's raw USB protocol yourself means reimplementing what the manufacturer's driver already does correctly (color management, paper handling, error recovery). | **Not used in MVP** | Server | Hard — this is genuinely advanced and printer-model-specific. |
 | **SQLite** | A lightweight, file-based database built into Python (no server process needed). | Only relevant if you need to durably track print job history across restarts. See Section 12 — likely **not needed for v1**. | **Optional, likely skip initially** | Server | Yes, but skip until you feel the need for it. |
 | **Pydantic** | Comes bundled with FastAPI; defines the *shape* of data (e.g. "a print job has a filename and a printer name") and validates it automatically. | Prevents malformed requests from crashing your service; also documents your API for free. | **Required if using FastAPI** (included automatically) | Server | Yes — you'll barely notice you're using it beyond writing simple class definitions. |
+| **pytest** (+ **pytest-cov**) | The test runner that executes `tests/` and measures which lines actually ran (coverage). | Verifies the service's *logic* on every change without needing the printer — OS boundaries (win32print, subprocess, filesystem) are faked. CI fails below the coverage gate. | **Dev tool** (`requirements-dev.txt`) | Server + CI (runs on any OS) | Yes — the existing suite is the reference for writing more tests. |
+| **httpx** | HTTP client library that FastAPI's `TestClient` uses to fake requests. | Lets tests drive the whole app (`POST /print`, `GET /jobs`…) in-process, with no network and no phone. | **Dev tool** (`requirements-dev.txt`) | Server + CI | Yes — invisible until you write API tests. |
+| **ruff** | The linter: flags unused imports, undefined names, import-order drift, and other real-bug classes. | Catches mistakes before they run; CI runs it before the test suite. Deliberately *not* used as a formatter — no wholesale reformatting of working code. | **Dev tool** (`requirements-dev.txt`) | Server + CI | Yes. |
 
 **Bottom-line recommended stack for v1 (Windows server):**
 `FastAPI` + `Uvicorn` (web layer) + `pywin32` (talks to Windows printing) + in-memory Python data structures (no database yet).
@@ -311,18 +314,24 @@ This is a home-lab project, so the goal is **sensible defaults**, not enterprise
 ## 10. Project Folder Structure 🔵
 
 ```text
-printer-service/
-├── app/
-│   ├── main.py          # Creates the FastAPI app, wires routes together, starts here
-│   ├── api/              # Route definitions (e.g. print.py, jobs.py, health.py)
-│   ├── printer/           # pywin32-based code: list printers, submit jobs
-│   ├── services/          # Business logic: validation, temp-file handling, job tracking
-│   └── models/            # Pydantic models: shape of requests/responses (e.g. PrintJob)
-├── uploads/                # Temp storage for incoming PDFs (cleaned up after printing)
-├── logs/                   # Plain text log files
-├── tests/                  # Automated tests (can start empty, grow as you learn)
-├── requirements.txt         # List of Python packages this project needs
-├── .env                     # Local config values (e.g. chosen port) — not committed if using git
+printerService/
+├── app/                      # The service
+│   ├── main.py               # FastAPI app entry — wires routers, /health, startup sweep
+│   ├── config.py             # Tiny .env parser + settings constants
+│   ├── api/                  # Routes: print.py, jobs.py, printers.py, web.py (the phone page)
+│   ├── printer/              # windows.py — pywin32 detection + SumatraPDF submission
+│   ├── services/             # pipeline, job store, upload validation, PIN auth, logging
+│   └── models/               # Pydantic request/response shapes (PrintJob, PrintAccepted…)
+├── tests/                    # pytest suite: unit/ (logic, OS faked) + api/ (via TestClient)
+│   └── conftest.py           # Shared fixtures: fresh job store, temp uploads/, fake win32print
+├── .github/workflows/ci.yml  # GitHub Actions: ruff + pytest (+ coverage gate) on every push/PR
+├── uploads/                  # Temp storage for incoming PDFs (auto-cleaned)
+├── logs/                     # service.log (rotating, ~1 MB × 3)
+├── requirements.txt          # Runtime packages: fastapi, uvicorn, python-multipart, pywin32
+├── requirements-dev.txt      # Dev packages: pytest, pytest-cov, httpx, ruff
+├── pyproject.toml            # Tool config: pytest options, coverage gate, ruff rules
+├── spike_print_test.py       # Standalone hardware diagnostic — run on the print-server PC
+├── .env                      # Local config values (never committed)
 └── README.md                 # Human-facing quickstart instructions
 ```
 
@@ -374,6 +383,24 @@ For a single-server, single-user, home-lab MVP, an **in-memory Python dictionary
 | 11 | What happens if Windows Firewall blocks the port? | Failure case |
 
 Run the "normal" tests first, in order — each one builds confidence in the layer below it. Only tackle the failure cases once the happy path works end-to-end.
+
+### Automated Test Suite (added after the MVP) ✅
+
+The table above is the *hardware/network* test plan. On top of it sits an automated pytest suite (`tests/`, run by `pytest` from the project root, and by GitHub Actions on every push/PR) that verifies everything which **doesn't require the actual hardware**:
+
+| What the suite verifies | How |
+|---|---|
+| Upload validation: extension, `%PDF-` magic bytes, size limit — including the exact boundary (`>` vs `>=`) | Unit tests with parametrized inputs (table row #8, automated) |
+| Job lifecycle `received → queued → done/failed/cancelled`, error/printer recording, cancellation rules | Unit tests against the in-memory store (row #6's locking, via a concurrency smoke test) |
+| Print submission *decisions*: SumatraPDF command line, printer-name override, print-verb fallback and its "default printer only" refusal, loud failure without pywin32 | Unit tests with a **fake `win32print` module** injected into `sys.modules` and mocked `subprocess`/`os.startfile` |
+| Whole-API behavior: `/health`, `/`, `/print` (201/401/413/415/500), `/jobs` CRUD, `/printers` (200/503/500) | API tests through FastAPI's `TestClient` — no network needed (rows #2/#3's logic) |
+| Pipeline threading: `queued` visible while the thread runs, temp file deleted after `done`, kept after `failed` | Unit tests waiting on fakes with bounded polling (deterministic, no `sleep`) |
+
+**Key design rule:** tests never touch machine state — no real printer, no real SumatraPDF, no real `.env`, real `uploads/` redirected to a temp dir. That's what lets the same suite pass on a Windows dev box and the Ubuntu CI runner. It's possible at all because `win32print` is imported lazily *inside* `app/printer/windows.py`'s functions — a v1 design choice (Section 4) that turned out to make CI possible for free.
+
+**What stays manual:** anything physical or environmental — rows #1, #5, #7, #9, #10, #11, and the "did paper come out" half of #4/#5. `spike_print_test.py` on the actual print-server PC remains the hardware truth (Section 5).
+
+**Quality gates in CI (`.github/workflows/ci.yml`, Ubuntu + Python 3.12):** `ruff check .` (lint only — no formatter enforcement, so working code never gets reformatted wholesale) then `pytest` with `--cov-fail-under=90` (configured in `pyproject.toml`; measured coverage ≈95%, the gap is mostly `logging_setup.py`, which tests deliberately don't execute to keep global logging state pristine). The same two commands run locally from the project root after `pip install -r requirements-dev.txt`.
 
 ---
 

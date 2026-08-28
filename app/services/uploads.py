@@ -28,6 +28,15 @@ def ensure_upload_dir() -> None:
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def upload_path(job_id: str) -> Path:
+    """Where an upload with this job id lives on disk.
+
+    Every module that needs to find a stored upload goes through here, so
+    the location is defined once — and tests can redirect it in one place.
+    """
+    return UPLOAD_DIR / f"{job_id}.pdf"
+
+
 def validate_pdf(filename: str, data: bytes) -> None:
     """Three checks, cheapest first (SOURCE_OF_TRUTH Section 8)."""
 
@@ -57,7 +66,7 @@ def save_upload(data: bytes) -> tuple[str, Path]:
     """Store the bytes under a unique name. Returns (job_id, saved_path)."""
     ensure_upload_dir()
     job_id = uuid.uuid4().hex[:12]  # short, unique, no secrets in it
-    path = UPLOAD_DIR / f"{job_id}.pdf"
+    path = upload_path(job_id)
     path.write_bytes(data)
     return job_id, path
 

@@ -17,8 +17,8 @@ Then:    open http://localhost:8000 in THIS PC's browser (tests the server)
 And:     open http://<this-pc-ip>:8000 on your PHONE (tests the network path)
 """
 
-from http.server import BaseHTTPRequestHandler, HTTPServer
 import socket
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 PORT = 8000
 

@@ -1,7 +1,9 @@
 # Printer Service — Print from your Android phone, over Wi-Fi
 
+[![CI](https://github.com/samananias/printerService/actions/workflows/ci.yml/badge.svg)](https://github.com/samananias/printerService/actions/workflows/ci.yml)
+
 **Project:** Android phone → Wi-Fi → Python service (this PC) → Windows print queue → USB → Epson L3210
-**Status:** ✅ **MVP working end-to-end** — a phone upload prints real paper.
+**Status:** ✅ **MVP working end-to-end** — a phone upload prints real paper. ✅ Logic verified automatically: pytest suite + ruff lint run in CI on every push.
 **Full design document:** [docs/SOURCE_OF_TRUTH.md](docs/SOURCE_OF_TRUTH.md) — architecture, concepts, roadmap, testing plan. If it disagrees with this file, it wins.
 
 ---
@@ -12,10 +14,15 @@
 |---|---|
 | `app/` | The service: FastAPI app, upload + print pipeline, job tracking, Windows printing |
 | `app/api/web.py` | The mobile web page (file picker + Print button) served at `/` |
+| `tests/` | pytest suite — unit tests (OS boundaries faked) + API tests via TestClient |
+| `tests/conftest.py` | Shared fixtures: fresh job store, temp `uploads/`, fake `win32print`, print mock |
 | `spike_print_test.py` | Standalone printer diagnostic — run it when printing misbehaves |
 | `allow_firewall_8000.bat` | One-click firewall rule (run as administrator, once) |
 | `.env.example` | Configuration template — copy to `.env` (never committed) |
 | `requirements.txt` | Python packages: fastapi, uvicorn, pywin32, python-multipart |
+| `requirements-dev.txt` | Dev tools: pytest, pytest-cov, httpx, ruff |
+| `pyproject.toml` | Tool config: pytest options, coverage gate (90%), ruff lint rules |
+| `.github/workflows/ci.yml` | GitHub Actions: lint + tests on every push/PR (Ubuntu) |
 | `uploads/`, `logs/` | Runtime temp files (auto-cleaned) and `logs/service.log` |
 
 ---
@@ -69,6 +76,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
   ```
 - Working looks like: `INFO: Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)`
 - Quick self-check from the same PC: open `http://localhost:8000/health` → `{"status":"ok"}`
+- Changed the code? Run **Run the checks** below — same commands CI runs.
 
 ---
 
@@ -147,8 +155,28 @@ Full troubleshooting table: [docs/SOURCE_OF_TRUTH.md](docs/SOURCE_OF_TRUTH.md) S
 
 ---
 
+## Run the Checks (what CI runs)
+
+Changed the service code? Two commands verify the logic — without printing anything:
+
+```powershell
+.venv\Scripts\activate
+pip install -r requirements-dev.txt   # once per machine
+ruff check .                          # lint: unused imports, undefined names, style drift
+pytest                                # the suite + coverage report (fails below the 90% gate)
+```
+
+- **Unit tests** (`tests/unit/`) exercise validation, job tracking, PIN auth, and the printing decisions with every OS boundary faked — no printer, no SumatraPDF, no network needed.
+- **API tests** (`tests/api/`) drive the whole FastAPI app through a test client, the same requests the phone makes.
+- Tests never touch machine state (real `uploads/` is redirected to a temp dir), so they run identically on your PC and on CI's Ubuntu runner.
+- Real paper **can't** be tested by CI — no printer is attached to it. The spike (§6) stays the hardware test.
+- GitHub Actions runs both commands on every push and pull request (`.github/workflows/ci.yml`); the badge at the top shows the latest result.
+
+---
+
 ## Where to Go Next
 
 - **Roadmap & current phase** → [docs/SOURCE_OF_TRUTH.md](docs/SOURCE_OF_TRUTH.md) Section 9
 - **Why it's built this way** → Sections 3–8 there (protocol choice, tech stack, security, scope)
-- **API design** → Section 11 · **Testing plan** → Section 13
+- **API design** → Section 11 · **Testing plan + how the automated suite fits in** → Section 13
+- **How the test fixtures work** → the commented `tests/conftest.py` · **What CI runs** → `.github/workflows/ci.yml`

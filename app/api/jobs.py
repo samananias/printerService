@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.models.printing import PrintJob
 from app.services import jobs
 from app.services.auth import require_pin
-from app.services.uploads import UPLOAD_DIR
+from app.services.uploads import upload_path
 
 router = APIRouter()
 
@@ -45,7 +45,7 @@ def cancel(job_id: str, _: None = Depends(require_pin)):
 
     # Remove the stored file so cancelled uploads don't fill the disk.
     try:
-        (UPLOAD_DIR / f"{job_id}.pdf").unlink(missing_ok=True)
+        upload_path(job_id).unlink(missing_ok=True)
     except OSError:
         pass  # cleanup failure must not fail the cancel
 

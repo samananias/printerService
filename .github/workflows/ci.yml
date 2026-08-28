@@ -1,0 +1,42 @@
+# Continuous Integration — runs on every push to main and every pull request.
+#
+# What CI verifies (and what it can't):
+#   ✅ all service LOGIC — validation, job lifecycle, auth, print submission
+#      decisions, API behavior (tests/ via pytest, with the OS faked out)
+#   ✅ lint cleanliness (ruff) and a coverage floor (pyproject.toml gate)
+#   ❌ real paper — no printer is attached to a CI runner. The spike
+#      (spike_print_test.py) on the actual print-server PC remains the
+#      hardware test (SOURCE_OF_TRUTH Section 5).
+#
+# Why Ubuntu works for a Windows-only printer: win32print is imported lazily
+# INSIDE app/printer/windows.py's functions, so the whole app imports and
+# runs here with fakes standing in for the OS boundary.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install runtime + dev dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Lint (ruff)
+        run: ruff check .
+
+      - name: Tests + coverage gate (pytest)
+        # Flags come from pyproject.toml: --cov=app, term-missing report,
+        # and the --cov-fail-under gate.
+        run: pytest

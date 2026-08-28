@@ -13,3 +13,10 @@ uploads/*
 logs/*
 !logs/.gitkeep
 *.log
+
+# Test / tooling caches
+.pytest_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
