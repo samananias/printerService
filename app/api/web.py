@@ -38,6 +38,8 @@ PAGE = """<!DOCTYPE html>
   h1     { font-size: 1.3rem; margin: 0 0 4px; }
   p.sub  { color: #667; margin: 0 0 18px; font-size: .9rem; }
   input[type=file] { width: 100%; margin-bottom: 14px; }
+  input[type=password] { width: 100%; margin-bottom: 14px; padding: 8px;
+           box-sizing: border-box; border: 1px solid #ccd; border-radius: 6px; }
   button { width: 100%; padding: 14px; font-size: 1.05rem;
            border: 0; border-radius: 8px; background: #2563eb;
            color: #fff; font-weight: 600; }
@@ -54,6 +56,7 @@ PAGE = """<!DOCTYPE html>
   <p class="sub">Pick a PDF and send it to the printer.</p>
 
   <input type="file" id="file" accept=".pdf,application/pdf">
+  <input type="password" id="pin" placeholder="PIN (only if the server set one)">
   <button id="printBtn" onclick="sendPrint()">Print</button>
   <div id="result"></div>
 </div>
@@ -87,12 +90,19 @@ async function sendPrint() {
     const body = new FormData();
     body.append("file", file);            // field name must be "file"
 
-    const response = await fetch("/print", { method: "POST", body });
+    // Send the PIN header only if the user typed one; the server ignores
+    // it entirely when no PIN is configured (auth disabled).
+    const pin = document.getElementById("pin").value.trim();
+    const headers = pin ? { "X-API-PIN": pin } : {};
+
+    const response = await fetch("/print", { method: "POST", body, headers });
     const data = await response.json();
 
     if (response.ok) {
       show("✅ Sent!\\njob id: " + data.job_id +
            "\\nstatus: " + data.status, "ok");
+    } else if (response.status === 401) {
+      show("❌ Wrong PIN.", "err");
     } else {
       // The server answered with a problem (415 not-a-PDF, 413 too big, …)
       show("❌ Server said: " + (data.detail || response.status), "err");

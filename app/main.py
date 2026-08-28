@@ -21,6 +21,7 @@ Phase status (SOURCE_OF_TRUTH Section 9):
   P4: POST /print upload endpoint (app/api/print.py)  ✅ done
   P6: mobile web page (app/api/web.py, GET /)  ✅ done
   P7: /printers, /jobs, /jobs/{id} (GET/DELETE)  ✅ done
+  P8: logging, PIN auth, error hardening  ✅ done
   P5: upload handler calls app/printer/ to submit real print jobs
 """
 
@@ -32,7 +33,11 @@ from app.api.jobs import router as jobs_router
 from app.api.print import router as print_router
 from app.api.printers import router as printers_router
 from app.api.web import router as web_router
+from app.services.logging_setup import setup_logging
 from app.services.uploads import sweep_stale_uploads
+
+# Configure logging before anything else logs (including our own startup).
+setup_logging()
 
 
 @asynccontextmanager

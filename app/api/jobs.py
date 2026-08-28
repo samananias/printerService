@@ -7,10 +7,11 @@ Endpoints (SOURCE_OF_TRUTH Section 11):
   DELETE /jobs/{id}   — cancel a job that hasn't reached the print queue
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.models.printing import PrintJob
 from app.services import jobs
+from app.services.auth import require_pin
 from app.services.uploads import UPLOAD_DIR
 
 router = APIRouter()
@@ -32,7 +33,7 @@ def one_job(job_id: str):
 
 
 @router.delete("/jobs/{job_id}", response_model=PrintJob)
-def cancel(job_id: str):
+def cancel(job_id: str, _: None = Depends(require_pin)):
     """Cancel a queued job (Section 11: "you will queue the wrong file")."""
     job = jobs.get_job(job_id)
     if job is None:
