@@ -10,9 +10,8 @@ Endpoints (SOURCE_OF_TRUTH Section 11):
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.models.printing import PrintJob
-from app.services import jobs
+from app.services import jobs, uploads
 from app.services.auth import require_pin
-from app.services.uploads import upload_path
 
 router = APIRouter()
 
@@ -43,10 +42,9 @@ def cancel(job_id: str, _: None = Depends(require_pin)):
     if not ok:
         raise HTTPException(status_code=409, detail=message)
 
-    # Remove the stored file so cancelled uploads don't fill the disk.
-    try:
-        upload_path(job_id).unlink(missing_ok=True)
-    except OSError:
-        pass  # cleanup failure must not fail the cancel
+    # Remove the stored file(s) so cancelled uploads don't fill the disk.
+    # delete_job_files covers the source upload and, once non-PDF formats
+    # land, its converted PDF alongside it.
+    uploads.delete_job_files(job_id)
 
     return jobs.get_job(job_id)

@@ -37,18 +37,23 @@ class PrintJob(BaseModel):
     updated_at: datetime
     printer: str | None = None  # set in Phase 5 when actually submitted
     error: str | None = None
+    format: str | None = None  # detected category ("pdf" today; image/office/text as phases land)
 
 
 class JobStatus:
     """The lifecycle of a job. String constants keep the JSON simple.
 
-    received → queued → printing → done
+    received → queued → converting → printing → done
                      ↘ failed
     received (or queued, once P5 submits to Windows) → cancelled
+
+    `converting` (p10) covers format conversion — a no-op for PDFs, but the
+    visible step that explains why an office document takes tens of seconds.
     """
 
     RECEIVED = "received"
     QUEUED = "queued"
+    CONVERTING = "converting"
     PRINTING = "printing"
     DONE = "done"
     FAILED = "failed"

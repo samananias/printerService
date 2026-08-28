@@ -69,7 +69,7 @@ class TestPrintRejections:
 
 class TestPrintErrors:
     def test_disk_failure_returns_500(self, client, pdf_bytes, monkeypatch, mock_print):
-        def broken_save(data):
+        def broken_save(data, ext=".pdf"):
             raise OSError("disk full")
 
         monkeypatch.setattr("app.api.print.save_upload", broken_save)

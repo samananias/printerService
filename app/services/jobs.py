@@ -25,8 +25,18 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def create_job(job_id: str, filename: str, size_bytes: int, path: Path) -> PrintJob:
-    """Register a freshly uploaded file as a tracked job."""
+def create_job(
+    job_id: str,
+    filename: str,
+    size_bytes: int,
+    path: Path,
+    format: str | None = None,
+) -> PrintJob:
+    """Register a freshly uploaded file as a tracked job.
+
+    `format` is the detected category from upload validation ("pdf" in
+    Phase 1) — recorded so the pipeline can pick the right processor.
+    """
     job = PrintJob(
         job_id=job_id,
         filename=filename,
@@ -34,6 +44,7 @@ def create_job(job_id: str, filename: str, size_bytes: int, path: Path) -> Print
         status=JobStatus.RECEIVED,
         created_at=_now(),
         updated_at=_now(),
+        format=format,
     )
     with _lock:
         _jobs[job_id] = job

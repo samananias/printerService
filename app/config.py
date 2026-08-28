@@ -52,4 +52,29 @@ SUMATRA_PATH = _get("SUMATRA_PATH", "")
 
 # Every real PDF starts with these 5 bytes — the "magic bytes" check that
 # catches renamed/fake files that a mere ".pdf" extension check would miss.
+# Consumed by app/detection.py, which generalizes the idea to every format.
 PDF_MAGIC = b"%PDF-"
+
+# ------------------------------------------------------------------
+# Multi-format printing settings (docs/MULTI_FORMAT_PLAN.md).
+# Phase 1 only wires the config; each value becomes load-bearing in the
+# phase that needs it (images p11, office p12, print options v2).
+# ------------------------------------------------------------------
+
+# Paper size passed to SumatraPDF's -print-settings once non-PDF formats
+# reach the printer (Phase 2). Examples: A4, letter, legal.
+PAPER_SIZE = _get("PAPER_SIZE", "A4")
+
+# Office conversion (Phase 3): LibreOffice Headless. ENABLE_OFFICE is the
+# kill switch for the old PC — 0 turns office formats off without
+# uninstalling anything; they are additionally refused while LibreOffice
+# is not installed.
+ENABLE_OFFICE = _get("ENABLE_OFFICE", "1").strip().lower() not in ("0", "false", "no")
+
+# Explicit path to soffice.exe. Empty = use the standard install location.
+LO_PATH = _get("LO_PATH", "")
+
+# Seconds a file conversion may run before the service kills it (enforced
+# by the office processor's subprocess handling; images/text finish in well
+# under a second).
+CONVERT_TIMEOUT_S = int(_get("CONVERT_TIMEOUT_S", "120"))

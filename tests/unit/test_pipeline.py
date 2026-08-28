@@ -4,8 +4,14 @@ start_job() hands work to a daemon thread; the fakes signal a
 threading.Event so each test waits deterministically for that thread
 instead of sleeping. This is where the documented lifecycle lives:
 
-    received → queued → done   (file deleted)
-                       ↘ failed (file kept for diagnosis)
+    received → queued → converting → printing → done   (files deleted)
+                                              ↘ failed (files kept)
+
+Since p10 the pipeline has a conversion stage between upload and print:
+the processor turns the source file into the service's one print format
+(a PDF). Phase 1 registers only the PDF pass-through, so the PDF path is
+a no-op conversion — the office/image/text stages arrive in later phases
+(docs/MULTI_FORMAT_PLAN.md §10).
 """
 
 import threading
@@ -13,6 +19,7 @@ import threading
 import pytest
 
 from app.models.printing import JobStatus
+from app.processors.base import ConversionError
 from app.services import jobs, pipeline
 
 TEST_PRINTER = "EPSON L3210 Series"
@@ -29,19 +36,19 @@ def job_with_pdf(tmp_upload_dir):
 
 
 class TestStartJob:
-    def test_job_is_queued_while_the_print_thread_is_still_running(
+    def test_job_is_in_printing_state_while_the_print_thread_is_running(
         self, job_with_pdf, mock_print, wait_for_status
     ):
-        # The fake is so fast the thread could finish before this test even
-        # reads the store — so freeze it with a gate to observe "queued",
-        # the state the phone's 201 response reflects.
+        # The fake is frozen mid-print so the test can observe the transient
+        # "printing" state. The phone's 201 still says "queued" — this is
+        # what polling sees on the way to done.
         gate = threading.Event()
         mock_print.gate = gate
 
         pipeline.start_job("job-1", job_with_pdf)
 
         assert mock_print.called.wait(timeout=5)
-        assert jobs.get_job("job-1").status == JobStatus.QUEUED
+        assert jobs.get_job("job-1").status == JobStatus.PRINTING
 
         gate.set()
         wait_for_status("job-1", JobStatus.DONE)  # completes once released
@@ -79,6 +86,64 @@ class TestStartJob:
 
         wait_for_status("job-1", JobStatus.DONE)
 
+        # The PDF processor is a pass-through: Sumatra receives the upload
+        # exactly as stored — same contract spike T4 proved on real paper.
         assert mock_print.pdf_path == job_with_pdf
         # printer_name=None means "let windows.py resolve PRINTER_NAME/default".
         assert mock_print.printer_name is None
+
+
+class TestConversionStage:
+    """The conversion stage between upload and print (p10 groundwork)."""
+
+    def test_conversion_failure_marks_failed_and_never_prints(
+        self, job_with_pdf, mock_print, monkeypatch, wait_for_status
+    ):
+        class FailingProcessor:
+            def process(self, src, out_dir):
+                raise ConversionError("LibreOffice crashed mid-conversion")
+
+        monkeypatch.setattr(pipeline, "for_category", lambda category: FailingProcessor())
+
+        pipeline.start_job("job-1", job_with_pdf, category="office")
+
+        job = wait_for_status("job-1", JobStatus.FAILED)
+        assert "crashed" in job.error
+        assert job_with_pdf.exists()  # kept for diagnosis
+        assert mock_print.called.is_set() is False  # nothing reached the printer
+
+    def test_conversions_run_one_at_a_time(
+        self, tmp_upload_dir, mock_print, monkeypatch, wait_for_status, wait_until
+    ):
+        # The old-PC guard: with a ≤4 GB machine and a future heavyweight
+        # converter (LibreOffice), two jobs must never convert at once.
+        class SlowProcessor:
+            def __init__(self):
+                self.in_process = 0
+                self.max_in_process = 0
+                self.release = threading.Event()
+
+            def process(self, src, out_dir):
+                self.in_process += 1
+                self.max_in_process = max(self.max_in_process, self.in_process)
+                self.release.wait(timeout=5)
+                self.in_process -= 1
+                return src
+
+        slow = SlowProcessor()
+        monkeypatch.setattr(pipeline, "for_category", lambda category: slow)
+
+        tmp_upload_dir.mkdir(parents=True, exist_ok=True)
+        for number in ("1", "2"):
+            path = tmp_upload_dir / f"job-{number}.pdf"
+            path.write_bytes(b"%PDF-1.4 test")
+            jobs.create_job(f"job-{number}", "file.pdf", 13, path, format="office")
+            pipeline.start_job(f"job-{number}", path, category="office")
+
+        wait_until(lambda: slow.in_process >= 1, message="first conversion never started")
+
+        slow.release.set()
+        wait_for_status("job-1", JobStatus.DONE)
+        wait_for_status("job-2", JobStatus.DONE)
+
+        assert slow.max_in_process == 1  # the second never overlapped the first
