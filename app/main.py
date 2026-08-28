@@ -17,18 +17,43 @@ Concept map (README Section 15):
                    the Windows Firewall rule (allow_firewall_8000.bat).
 
 Phase status (SOURCE_OF_TRUTH Section 9):
-  P2  <- we are here: GET /health
-  P4: POST /print upload endpoint (wired via app/api/)
+  P2: GET /health  ✅ done
+  P4: POST /print upload endpoint (app/api/print.py)  ✅ done
   P5: upload handler calls app/printer/ to submit real print jobs
 """
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
+
+from app.api.print import router as print_router
+from app.services.uploads import sweep_stale_uploads
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Runs once at startup and once at shutdown.
+
+    Startup: sweep uploads/ of files left behind by a previous run — the
+    temp-file hygiene SOURCE_OF_TRUTH Section 8 asks for. (Phase 5 will also
+    delete each file right after it's printed; the sweep is the safety net
+    for crashes.)
+    """
+    removed = sweep_stale_uploads()
+    if removed:
+        print(f"[startup] swept {removed} stale upload(s) from a previous run")
+    yield
+    # Shutdown: nothing to clean yet.
+
 
 app = FastAPI(
     title="Printer Service",
     description="Android → Wi-Fi → this service → Windows print queue → Epson L3210",
     version="0.1.0",
+    lifespan=lifespan,
 )
+
+app.include_router(print_router)
 
 
 @app.get("/")
