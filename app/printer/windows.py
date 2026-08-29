@@ -75,6 +75,68 @@ def find_sumatra() -> str | None:
     return None
 
 
+# SumatraPDF's documented exit codes (official CLI docs) → what the phone
+# user sees. Codes not listed fall back to the raw stderr text.
+SUMATRA_EXIT_MESSAGES = {
+    2: "The PDF could not be opened — it may be corrupt or password-protected.",
+    3: "The document does not allow printing.",
+    4: "The printer was not found — check the printer name and connection.",
+    5: "The printer driver reported a failure — check paper, ink and USB.",
+    6: "Printing was blocked by a restriction policy.",
+}
+
+# Printer status flags (win32print constants, with hex fallbacks so a
+# missing constant on some pywin32 build can't break the check) and the
+# messages they produce. PRINTER_ATTRIBUTE_WORK_OFFLINE is what Windows
+# sets when a USB printer is powered off — the most common real case.
+_NOT_READY_FLAGS = {
+    0x00000080: "offline",          # PRINTER_STATUS_OFFLINE
+    0x00001000: "not available",    # PRINTER_STATUS_NOT_AVAILABLE
+    0x00000010: "out of paper",     # PRINTER_STATUS_PAPER_OUT
+    0x00000008: "out of paper (jam)",  # PRINTER_STATUS_PAPER_JAM
+    0x00400000: "reporting its door open",  # PRINTER_STATUS_DOOR_OPEN
+    0x00000002: "in an error state",  # PRINTER_STATUS_ERROR
+}
+_ATTRIBUTE_WORK_OFFLINE = 0x00000400
+
+
+def printer_ready(printer_name: str) -> tuple[bool, str]:
+    """Best-effort pre-dispatch check (p15): is the printer usable?
+
+    Returns (True, "") when the spooler reports the printer as fine — or
+    when the check itself can't be performed (never block printing on a
+    query hiccup). Returns (False, reason) for definitive not-ready
+    states; catching them BEFORE SumatraPDF runs turns a generic driver
+    exit code into a message the phone user can act on.
+    """
+    import win32print
+
+    try:
+        handle = win32print.OpenPrinter(printer_name)
+        try:
+            info = win32print.GetPrinter(handle, 2)
+            status = int(info["Status"])
+            attributes = int(info["Attributes"])
+        finally:
+            win32print.ClosePrinter(handle)
+    except Exception:
+        logger.warning(
+            "printer readiness check failed for %r — dispatching anyway",
+            printer_name,
+            exc_info=True,
+        )
+        return True, ""
+
+    if attributes & _ATTRIBUTE_WORK_OFFLINE:
+        return False, (
+            "The printer is offline (Windows has 'Use Printer Offline' set)."
+        )
+    for flag, label in _NOT_READY_FLAGS.items():
+        if status & flag:
+            return False, f"The printer is {label}."
+    return True, ""
+
+
 def resolve_printer_name() -> str:
     """The printer jobs are submitted to: PRINTER_NAME config, else the
     Windows default. Used by submit_pdf and the cancel endpoint's spooler
@@ -128,6 +190,12 @@ def submit_pdf(pdf_path: Path, printer_name: str | None = None) -> tuple[str, st
     if printer_name is None:
         printer_name = resolve_printer_name()
 
+    ready, not_ready_reason = printer_ready(printer_name)
+    if not ready:
+        # Fail BEFORE handing the job to SumatraPDF — a known-offline
+        # printer would otherwise surface as a generic driver exit code.
+        raise RuntimeError(not_ready_reason)
+
     sumatra = find_sumatra()
     if sumatra:
         logger.info("printing %s via SumatraPDF to %r", pdf_path.name, printer_name)
@@ -145,9 +213,12 @@ def submit_pdf(pdf_path: Path, printer_name: str | None = None) -> tuple[str, st
             timeout=180,
         )
         if result.returncode != 0:
+            reason = SUMATRA_EXIT_MESSAGES.get(
+                result.returncode, "Unknown printing failure."
+            )
             raise RuntimeError(
-                f"SumatraPDF failed (exit {result.returncode}): "
-                f"{result.stderr.decode(errors='replace').strip()}"
+                f"SumatraPDF failed (exit {result.returncode}): {reason} "
+                f"{result.stderr.decode(errors='replace').strip()}".rstrip()
             )
         return "sumatrapdf", printer_name
 

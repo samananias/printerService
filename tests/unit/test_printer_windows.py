@@ -246,6 +246,106 @@ class TestCancelSpoolerJobs:
         assert windows.cancel_spooler_jobs(TEST_PRINTER, "abc123") == 0
 
 
+# ---------------------------------------------------------------------------
+# printer_ready — the p15 pre-dispatch readiness check
+# ---------------------------------------------------------------------------
+
+
+class TestPrinterReady:
+    def test_healthy_printer_is_ready(self, fake_win32print):
+        fake_win32print.GetPrinter = lambda handle, level: {
+            "Status": 0,
+            "Attributes": 0,
+        }
+        assert windows.printer_ready(TEST_PRINTER) == (True, "")
+
+    def test_offline_status_is_not_ready(self, fake_win32print):
+        fake_win32print.GetPrinter = lambda handle, level: {
+            "Status": 0x00000080,  # PRINTER_STATUS_OFFLINE
+            "Attributes": 0,
+        }
+        ready, reason = windows.printer_ready(TEST_PRINTER)
+        assert ready is False
+        assert "offline" in reason
+
+    def test_windows_work_offline_attribute_is_not_ready(self, fake_win32print):
+        # What Windows sets when a USB printer is powered off — the most
+        # common real-world "why did nothing print" state.
+        fake_win32print.GetPrinter = lambda handle, level: {
+            "Status": 0,
+            "Attributes": 0x00000400,  # PRINTER_ATTRIBUTE_WORK_OFFLINE
+        }
+        ready, reason = windows.printer_ready(TEST_PRINTER)
+        assert ready is False
+        assert "offline" in reason
+
+    def test_out_of_paper_is_reported(self, fake_win32print):
+        fake_win32print.GetPrinter = lambda handle, level: {
+            "Status": 0x00000010,  # PRINTER_STATUS_PAPER_OUT
+            "Attributes": 0,
+        }
+        ready, reason = windows.printer_ready(TEST_PRINTER)
+        assert ready is False
+        assert "out of paper" in reason
+
+    def test_query_failure_never_blocks_printing(self, fake_win32print):
+        # Best-effort by design: a spooler query hiccup must not stop a
+        # job that might have printed fine.
+        def broken(handle, level):
+            raise RuntimeError("spooler grumbled")
+
+        fake_win32print.GetPrinter = broken
+        assert windows.printer_ready(TEST_PRINTER) == (True, "")
+
+    def test_not_ready_printer_refuses_dispatch_before_sumatra(
+        self, fake_win32print, tmp_path, monkeypatch, recorded_run
+    ):
+        fake_win32print.GetPrinter = lambda handle, level: {
+            "Status": 0x00000080,
+            "Attributes": 0,
+        }
+        monkeypatch.setattr(windows, "find_sumatra", lambda: "C:/SumatraPDF.exe")
+
+        with pytest.raises(RuntimeError, match="offline"):
+            windows.submit_pdf(tmp_path / "doc.pdf")
+
+        assert "cmd" not in recorded_run  # Sumatra never even started
+
+
+class TestSumatraExitCatalog:
+    def test_documented_exit_codes_map_to_human_messages(
+        self, fake_win32print, tmp_path, monkeypatch
+    ):
+        cases = {
+            2: "corrupt or password-protected",
+            4: "printer was not found",
+            5: "paper, ink and USB",
+        }
+        for code, expected in cases.items():
+            def failing_run(cmd, **kwargs):
+                return subprocess.CompletedProcess(cmd, returncode=code, stdout=b"", stderr=b"")
+
+            monkeypatch.setattr(windows.subprocess, "run", failing_run)
+            monkeypatch.setattr(windows, "find_sumatra", lambda: "C:/SumatraPDF.exe")
+
+            with pytest.raises(RuntimeError, match=expected):
+                windows.submit_pdf(tmp_path / "doc.pdf")
+
+    def test_unknown_exit_code_still_includes_stderr(
+        self, fake_win32print, tmp_path, monkeypatch
+    ):
+        def failing_run(cmd, **kwargs):
+            return subprocess.CompletedProcess(
+                cmd, returncode=99, stdout=b"", stderr=b"driver grumbled\n"
+            )
+
+        monkeypatch.setattr(windows.subprocess, "run", failing_run)
+        monkeypatch.setattr(windows, "find_sumatra", lambda: "C:/SumatraPDF.exe")
+
+        with pytest.raises(RuntimeError, match="driver grumbled"):
+            windows.submit_pdf(tmp_path / "doc.pdf")
+
+
 class TestPywin32Presence:
     def test_missing_pywin32_fails_fast(self, monkeypatch, tmp_path):
         # Setting a sys.modules entry to None makes `import win32print`

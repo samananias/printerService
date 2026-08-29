@@ -164,6 +164,8 @@ Copy `.env.example` → `.env` and edit. All values are optional; defaults work.
 | `JOB_DB_PATH` | `logs/jobs.sqlite3` | SQLite job history (survives restarts; started jobs from a crashed run are marked failed at startup). Delete the file to reset history |
 | `HOST`, `PORT` | `8000` | Informational — actually pass them on the uvicorn command line (§3) |
 
+Jobs are dispatched only after a printer readiness check (offline / out of paper / door open → refused with that reason), and SumatraPDF's failure exit codes are translated into human messages. `logs/service.log` rotates at ~1 MB (2 backups kept).
+
 ---
 
 ## 6. Diagnostics: the Printer Spike
@@ -204,6 +206,8 @@ For the multi-format work, `spike_t5_images.py` (images), `spike_t6_office.py` (
 | Job `failed`: printer not default / offline | Check the printer in Windows, print a Windows test page |
 | Office upload refused: "LibreOffice is not installed / ENABLE_OFFICE=0" | Install LibreOffice (§1) or set `ENABLE_OFFICE=1` in `.env`, then restart the service |
 | Office job `failed`: "did not finish within 120 s" | Big/complex document — raise `CONVERT_TIMEOUT_S` in `.env`, or export a PDF from the source app |
+| Job `failed`: "The printer is offline / out of paper" | The pre-print check caught it — power the printer on / load paper, then hit **🔁 Retry** |
+| Job `failed`: SumatraPDF exit 2/4/5 with a human reason | The error says what to do (corrupt PDF / printer not found / driver trouble); details in `logs/service.log` |
 | Office output looks wrong (fonts/pagination) | Install common fonts on the server; for XLSX, set a print area in Excel before saving (§ docs/MULTI_FORMAT_PLAN.md §7) |
 | Service IP changed after reboot | Set the router's DHCP reservation (§7 step 7) |
 

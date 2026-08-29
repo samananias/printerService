@@ -27,9 +27,8 @@ Claims are tagged like SOURCE_OF_TRUTH:
 - 🟡 **Follow-ups:** merge PR #1 when green; optionally set
   `PAPER_SIZE=A4` in `.env` (verified safe by T5); a phone smile-check of
   each format; LibreOffice install recipe now lives in README §1.
-- ⚪ **Next stage: Phase 6** (reliability: printer pre-check, error
-  catalog, log rotation) — Phase 5 landed in p14. Phase 7/v2 (print
-  options UI) after that.
+- ⚪ **Next stage: Phase 7** (print options UI: copies, page range, paper
+  size, color mode — v2). Phases 5–6 landed in p14/p15.
 
 ---
 

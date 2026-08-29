@@ -125,6 +125,10 @@ def fake_win32print(monkeypatch) -> types.ModuleType:
 
     fake.SetJob = _set_job
 
+    # Level-2 printer info for the p15 readiness check: a healthy printer
+    # by default (Status 0, no WORK_OFFLINE attribute). Tests override.
+    fake.GetPrinter = lambda handle, level: {"Status": 0, "Attributes": 0}
+
     monkeypatch.setitem(sys.modules, "win32print", fake)
     return fake
 
