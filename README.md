@@ -40,12 +40,21 @@
 | **Python 3.12+** | Runs the service | `winget install -e --id Python.Python.3.12` or [python.org](https://www.python.org/downloads/). Verify: `python --version`. If typing `python` opens the Microsoft Store: *Settings → Apps → Advanced app settings → App execution aliases* → turn OFF `python.exe` / `python3.exe` |
 | **SumatraPDF** | The PDF printing engine — the service hands PDFs to it silently | `winget install SumatraPDF.SumatraPDF` or [sumatrapdfreader.org](https://www.sumatrapdfreader.org). No configuration needed — standard install locations are searched automatically |
 | **Epson L3210 driver** | Windows must print normally on its own first | Test: *Settings → Printers → Epson L3210 → Print test page*. If that fails, fix it before anything else |
-| **LibreOffice** *(optional)* | Office documents (DOCX/XLSX/PPTX/ODF) are converted to PDF through it. Without it, office uploads are refused with a clear message — everything else keeps working | [libreoffice.org](https://www.libreoffice.org) or `winget install TheDocumentFoundation.LibreOffice`. Verify: `soffice --version` in a terminal (or just restart the service after installing) |
+| **LibreOffice** *(optional)* | Office documents (DOCX/XLSX/PPTX/ODF) are converted to PDF through it. Without it, office uploads are refused with a clear message — everything else keeps working | Install via CLI (below) or [libreoffice.org](https://www.libreoffice.org). Verify: `soffice --version` in a terminal (or just restart the service after installing) |
 | **Firewall rule, TCP 8000** | The #1 reason phones "can't connect" | Right-click `allow_firewall_8000.bat` → **Run as administrator** (one time), or accept Windows' pop-up on first run (tick *Private networks*) |
 
 ### The phone
 
 Nothing to install — any browser. Same Wi-Fi network as the service PC (guest networks usually isolate devices — a classic silent failure).
+
+**LibreOffice via CLI** (faster than winget, which can crawl on its CDN): download the MSI with the built-in `curl`, then run the installer. Swap in the current stable version from [libreoffice.org/download](https://www.libreoffice.org/download/download-libreoffice/) — the pattern is `LibreOffice_<version>_Win_x86-64.msi` under `stable/<version>/win/x86_64/`:
+
+```powershell
+curl.exe -L -o "$env:TEMP\LibreOffice.msi" "https://download.documentfoundation.org/libreoffice/stable/26.8.0/win/x86_64/LibreOffice_26.8.0_Win_x86-64.msi"
+msiexec /i "$env:TEMP\LibreOffice.msi"
+```
+
+Default "Typical" install is fine — it lands in `C:\Program Files\LibreOffice\program\`, which the service searches automatically (set `LO_PATH` in `.env` only for non-standard locations).
 
 ---
 
