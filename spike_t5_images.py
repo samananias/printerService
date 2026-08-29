@@ -120,6 +120,7 @@ def main() -> int:
     parser.add_argument(
         "--paper",
         choices=["a4", "letter", "legal", "a5", "a3"],
+        type=str.lower,
         help="also print one copy with -print-settings paper=<X>,fit",
     )
     args = parser.parse_args()
