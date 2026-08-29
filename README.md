@@ -60,34 +60,57 @@ Default "Typical" install is fine — it lands in `C:\Program Files\LibreOffice\
 
 ## 2. One-Time Setup
 
-From the project folder:
+From the project root folder, choose your terminal:
 
+### Option A: PowerShell / Command Prompt (CMD)
 ```powershell
 python -m venv .venv                     # create an isolated Python environment
 .venv\Scripts\activate                   # activate it — prompt gains (.venv)
-pip install -r requirements.txt          # install fastapi, uvicorn, pywin32, python-multipart
+pip install -r requirements.txt          # install dependencies
 copy .env.example .env                   # local config (see §5; defaults are fine)
 ```
 
-> PowerShell blocked `Activate.ps1`? Run once, then retry:
+> **PowerShell blocked `Activate.ps1`?** Run once, then retry:
 > `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`
-> Git Bash activation: `source .venv/Scripts/activate`
+
+### Option B: Git Bash
+```bash
+python -m venv .venv                     # create an isolated Python environment
+source .venv/Scripts/activate            # activate it — use 'source' and forward slashes '/'
+pip install -r requirements.txt          # install dependencies
+cp .env.example .env                     # local config (see §5; defaults are fine)
+```
+
+> ⚠️ **Git Bash Tip:** Always use forward slashes `/` and `source`. In Git Bash, backslashes `\` act as escape characters (so `.venv\Scripts\activate` will fail with command not found).
 
 ---
 
 ## 3. Run the Service
 
+From the project root folder:
+
+### PowerShell / Command Prompt
 ```powershell
 .venv\Scripts\activate
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
+*Or no-activation one-liner:*
+```powershell
+.venv\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+### Git Bash
+```bash
+source .venv/Scripts/activate
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+*Or no-activation one-liner:*
+```bash
+.venv/Scripts/python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
 
 - Keep the window open — the service exists only while it runs. `Ctrl+C` stops it.
 - `--host 0.0.0.0` is **required** — it means "listen on all network interfaces". Omit it and the phone can never connect.
-- No-activation one-liner (works from any terminal, any folder):
-  ```powershell
-  .venv\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000
-  ```
 - Working looks like: `INFO: Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)`
 - Quick self-check from the same PC: open `http://localhost:8000/health` → `{"status":"ok"}`
 - Changed the code? Run **Run the checks** below — same commands CI runs.
@@ -185,10 +208,19 @@ Full troubleshooting table: [docs/SOURCE_OF_TRUTH.md](docs/SOURCE_OF_TRUTH.md) S
 
 ## Run the Checks (what CI runs)
 
-Changed the service code? Two commands verify the logic — without printing anything:
+Changed the service code? Verify the logic — without printing anything:
 
+### PowerShell / Command Prompt
 ```powershell
 .venv\Scripts\activate
+pip install -r requirements-dev.txt   # once per machine
+ruff check .                          # lint: unused imports, undefined names, style drift
+pytest                                # the suite + coverage report (fails below the 90% gate)
+```
+
+### Git Bash
+```bash
+source .venv/Scripts/activate
 pip install -r requirements-dev.txt   # once per machine
 ruff check .                          # lint: unused imports, undefined names, style drift
 pytest                                # the suite + coverage report (fails below the 90% gate)

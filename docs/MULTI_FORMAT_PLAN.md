@@ -10,29 +10,26 @@ Claims are tagged like SOURCE_OF_TRUTH:
 
 ---
 
-## 0. Where this stage stopped (updated 2026-08-29)
+## 0. Where this stage stopped (closed 2026-08-29)
 
-**Code: complete through Phase 4. Paper verification: images ✓, text/CSV ✓, office pending (needs LibreOffice).**
+**MVP VERIFIED: code complete through Phase 4 AND all paper gates passed.**
 
-- 🟢 **Done and committed** on `multiple-types-compatibility` (pushed;
-  PR #1 open, CI running): `56afce6` (this roadmap) → `d078d41` **p10**
-  groundwork (detection + processor registry + generalized uploads +
-  conversion lock) → `b928e11` **p11** images → `19a7223` **p12** office →
-  `0be3eab` **p13** text/CSV → `5527c7c` docs → `1f1a1f4` spike fix. All
-  four MVP categories are registered; 193 automated tests pass at ≈97 %
-  coverage (gate 90 %); ruff clean.
-- ✅ **Spikes T5 (images) and T7 (TXT/CSV) PASSED on real paper**
-  (2026-08-29; details in SOURCE_OF_TRUTH §5). The T5 `--paper A4` copy
-  confirmed the Epson driver honors `-print-settings`, so `PAPER_SIZE`
-  may now be set in `.env` (optional; empty = driver chooses).
-- 🔴 **The last open MVP gate is T6 (office):** install LibreOffice on the
-  print-server PC, run `spike_t6_office.py`, judge the paper (table fits,
-  only the print area prints in landscape, 16:9 slides landscape), record
-  results in SOURCE_OF_TRUTH §5. Until then office uploads keep getting
-  the kill-switch 415 — designed behavior.
-- ⚪ **Phases 5–7 are NOT started** — §10 below describes them as designed
-  (queue management, reliability, print options UI), not as built.
-- Housekeeping: CI runs on PR #1; merge when green.
+- 🟢 **Done and pushed** on `multiple-types-compatibility` (PR #1 open):
+  `56afce6` (this roadmap) → `d078d41` **p10** groundwork → `b928e11`
+  **p11** images → `19a7223` **p12** office → `0be3eab` **p13** text/CSV →
+  docs/status commits → `1f1a1f4` spike fix. 193 automated tests at ≈97 %
+  coverage; ruff clean.
+- ✅ **Hardware gates all PASS on the Epson L3210** (2026-08-29):
+  **T4** (PDF, earlier) · **T5** (images + `paper=A4` driver check) ·
+  **T6** (office via LibreOffice 26.8.0: DOCX 20.8 s, XLSX 10.5 s, PPTX
+  10.9 s — print area honored) · **T7** (TXT/CSV). Details in
+  SOURCE_OF_TRUTH §5.
+- 🟡 **Follow-ups:** merge PR #1 when green; optionally set
+  `PAPER_SIZE=A4` in `.env` (verified safe by T5); a phone smile-check of
+  each format; LibreOffice install recipe now lives in README §1.
+- ⚪ **Next stage: Phase 5** (queue management: cancel-while-converting,
+  spooler purge, retry, SQLite persistence + startup recovery) — then
+  Phase 6 (reliability) and Phase 7/v2 (print options UI).
 
 ---
 
@@ -335,14 +332,15 @@ cut off at the right margin.
 - [x] Phase 1 refactor (p10), images (p11), office (p12), text/CSV (p13) —
       code committed and pushed.
 - [x] Branch pushed; CI runs on PR #1 — merge when green.
-- [x] T5 images spike PASSED on real paper (2026-08-29), including the
-      `paper=A4` driver check.
-- [x] T7 text/CSV spike PASSED on real paper (2026-08-29).
-- [ ] **T6 office spike** — install LibreOffice first; the last open gate
-      of the multi-format MVP.
+- [x] **T6 office spike PASSED** (2026-08-29, LibreOffice 26.8.0): print
+      area honored in landscape, table fits, slides landscape — the last
+      MVP gate is closed.
+- [x] T5 images spike PASSED (2026-08-29), including the `paper=A4`
+      driver check. · [x] T7 text/CSV spike PASSED (2026-08-29).
+- [ ] Merge PR #1 into `main` when CI is green.
 - [ ] Set `PAPER_SIZE=A4` in `.env` whenever desired (verified by T5;
       optional — empty = driver chooses).
-- [ ] Confirm the target PC's Windows version before enabling office
-      (pin LibreOffice 7.6.x if it's Win 7/8.1).
+- [x] Windows version confirmed: Windows 11 (current LibreOffice fine,
+      no 7.6.x pin needed).
 - [ ] Phase 7: verify long-bond paper (8.5×13) on the Epson driver
       (custom mm size vs driver paper name).
