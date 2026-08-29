@@ -248,6 +248,14 @@ AV scanning — ⚪ v2+ options.
   interrupted jobs to failed.
 - **Phase 6 (p15) — reliability:** pre-dispatch printer-status check; error
   catalog (exit code → message); log rotation; startup recovery.
+  **Landed in p15:** `printer_ready()` checks the spooler's status flags
+  (offline / not available / out of paper / jam / door open / error, plus
+  the `WORK_OFFLINE` attribute Windows sets when a USB printer is off)
+  BEFORE SumatraPDF runs — a known-bad printer fails with that reason
+  instead of a generic exit code; best-effort (a query hiccup never blocks
+  printing; verified against the real Epson's GetPrinter shape). Exit
+  codes 2/3/4/5/6 now map to human messages. Log rotation was already in
+  place since p8; startup recovery landed with p14.
 - **Phase 7 (v2) — print options & dialog UI:** optional per-request
   options on `POST /print`: `copies` (1–99 → `3x` + `collate`), `pages`
   (range `2-6`, `odd`/`even` — strict allowlist regex before it touches a
