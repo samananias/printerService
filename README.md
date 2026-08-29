@@ -3,7 +3,7 @@
 [![CI](https://github.com/samananias/printerService/actions/workflows/ci.yml/badge.svg)](https://github.com/samananias/printerService/actions/workflows/ci.yml)
 
 **Project:** Android phone → Wi-Fi → Python service (this PC) → Windows print queue → USB → Epson L3210
-**Status:** ✅ **PDF MVP working end-to-end** (phone → service → paper, spike T4). ✅ **Multi-format code-complete** (p10–p13: JPG/PNG/WebP images, DOCX/XLSX/PPTX/ODF office, TXT/CSV) and **T5 (images) + T7 (TXT/CSV) verified on real paper** (2026-08-29). ✅ 193 automated tests (~97 % coverage) + ruff + CI. 🔴 Only **T6 (office)** still pending — install LibreOffice, run `spike_t6_office.py` (office uploads are refused with a clear message until then).
+**Status:** ✅ **Multi-format MVP VERIFIED on real hardware** (2026-08-29): PDF, JPG/PNG/WebP, DOCX/XLSX/PPTX/ODF, and TXT/CSV all print end-to-end — spikes T4–T7 PASS (office via LibreOffice, CLI install in §1). ✅ 193 automated tests (~97 % coverage) + ruff + CI. 🔴 Next: merge PR #1, optionally `PAPER_SIZE` in `.env`, then Phase 5 (queue management).
 **Full design document:** [docs/SOURCE_OF_TRUTH.md](docs/SOURCE_OF_TRUTH.md) — architecture, concepts, roadmap, testing plan. If it disagrees with this file, it wins.
 **Multi-format roadmap & exact stopping point:** [docs/MULTI_FORMAT_PLAN.md](docs/MULTI_FORMAT_PLAN.md) ("Where this stage stopped") and [docs/SOURCE_OF_TRUTH.md](docs/SOURCE_OF_TRUTH.md) §9.
 
