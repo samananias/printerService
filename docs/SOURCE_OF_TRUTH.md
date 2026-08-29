@@ -1,7 +1,7 @@
 # Printer Service — Source of Truth
 
 **Project:** Android → Network → Python Service → USB → Epson L3210
-**Status:** 🟢 **Multi-format MVP code-complete** (p10–p13 on branch `multiple-types-compatibility`: PDF + images + office + TXT/CSV all printable in code; 193 automated tests, ≈97 % coverage, ruff clean). 🔴 **Paper verification for the NEW formats is still open** — hardware spikes T5/T6/T7 (scripts ready) have not been run, and LibreOffice is not yet installed, so office uploads currently get the kill-switch refusal (by design). T1–T4 remain 🟢 (real page printed via SumatraPDF). Commits are local to the branch — not yet pushed/merged. Living document. Update this file whenever a decision changes.
+**Status:** 🟢 **Multi-format MVP code-complete** (p10–p13 on branch `multiple-types-compatibility`: PDF + images + office + TXT/CSV all printable in code; 193 automated tests, ≈97 % coverage, ruff clean). ✅ **T5 (images) and T7 (TXT/CSV) PASSED on real paper** (2026-08-29). 🔴 **Only T6 (office) remains** — LibreOffice is not installed yet, so office uploads currently get the kill-switch refusal (by design). Branch pushed; PR #1 open; CI running. Living document. Update this file whenever a decision changes.
 **Audience:** Beginner learning networking, servers, and Python.
 **Quickstart & pre-setup checklist:** see the root [README.md](../README.md).
 
@@ -198,11 +198,10 @@ None of these should be assumed to work out of the box on your specific old PC w
 
 🟢 **Multi-format extension of the same decision (p10–p13):** every format is normalized to PDF *before* the print engine — format processors (images via Pillow, office via LibreOffice Headless, text/CSV via reportlab) feed the unchanged `submit_pdf()`, so SumatraPDF remains the only component that ever talks to the printer. The office converter is gated by `ENABLE_OFFICE` plus LibreOffice presence (the kill switch). Full decision record: [MULTI_FORMAT_PLAN.md](MULTI_FORMAT_PLAN.md).
 
-🔴 **PENDING SPIKES (code landed, hardware NOT yet verified — recorded 2026-08-29):**
-- **T5 — images → PDF → paper** (`spike_t5_images.py --paper A4`): EXIF orientation, transparency → white, fit/center on a white page, 300-DPI cap. The `--paper A4` copy verifies the driver honors `-print-settings` BEFORE `PAPER_SIZE` is ever set in `.env` (it ships empty on purpose).
-- **T6 — office → PDF → paper** (`spike_t6_office.py`): requires installing LibreOffice FIRST (not installed as of this date). Table-heavy DOCX, print-area XLSX (landscape), 16:9 PPTX; also record conversion time and RAM on the ≤4 GB PC.
-- **T7 — TXT/CSV → PDF → paper** (`spike_t7_text.py`): word-wrap/pagination and grid alignment with a repeated header row.
-A PASS on all three closes the multi-format MVP's hardware verification — record the results here, T4-style.
+🟢 **SPIKE RESULTS for the new formats (run on the print-server PC, 2026-08-29):**
+- **T5 PASS** (`spike_t5_images.py --paper A4`) — 4 test images (JPEG gradient, PNG with transparency, WebP, EXIF-rotated JPEG) converted by the real ImageProcessor in 0.19–0.35 s each and printed via SumatraPDF to `EPSON L3210 Series`. Paper judged good: all pages upright, nothing clipped, transparency corners white (not black), EXIF image upright. The extra `-print-settings "paper=A4,fit"` page also came out A4 → **the driver honors the flag**, so `PAPER_SIZE` may now be set in `.env` if wanted (still optional; empty = driver chooses).
+- **T7 PASS** (`spike_t7_text.py`) — TXT (wrap + pagination) and a 40×6 CSV with quoted cells rendered by the real TextProcessor and printed. Paper judged good: margins clean, nothing clipped, grid/borders drawn.
+- 🔴 **T6 — STILL PENDING:** LibreOffice is not installed on the print-server PC yet, so office uploads currently get the kill-switch 415 (by design). Install LibreOffice → run `spike_t6_office.py` (table-heavy DOCX, print-area XLSX, 16:9 PPTX; note conversion time/RAM) → record results here. **T6 is the last open gate of the multi-format MVP.**
 
 ---
 
@@ -325,11 +324,12 @@ decision record, phased roadmap and spike protocol (T5–T7) live in
 [MULTI_FORMAT_PLAN.md](MULTI_FORMAT_PLAN.md); its hardware spikes extend
 Section 5's T1–T4 convention before any new format prints real paper.
 
-**Status — where this stage stopped (2026-08-29):** 🟢 code complete
-through Phase 4; 🔴 the paper gates have not been run yet.
+**Status — where this stage stopped (updated 2026-08-29, same day):** 🟢 code
+complete through Phase 4; paper gates: **T5 PASS, T7 PASS, T6 pending**
+(needs LibreOffice).
 
-- 🟢 **Done** (commits on `multiple-types-compatibility`, local only —
-  not pushed):
+- 🟢 **Done** (commits on `multiple-types-compatibility`, pushed; PR #1
+  open, CI running):
   - `56afce6 docs:` decision record + roadmap (MULTI_FORMAT_PLAN.md).
   - `d078d41 p10:` detection (magic bytes per format, extension
     allowlist, macro rejection) + processor registry + generalized
@@ -348,15 +348,17 @@ through Phase 4; 🔴 the paper gates have not been run yet.
     and API accept every MVP extension. Office uploads currently return
     the kill-switch 415 because LibreOffice is not installed — designed
     behavior, not a bug.
+- ✅ **Since the morning of 2026-08-29:** branch pushed (PR #1 open, CI
+  running); spikes **T5 PASS** and **T7 PASS** on real paper (recorded in
+  Section 5); spike `--paper` argument fix pushed.
 - 🔴 **Still open before this stage is "done":**
-  1. Push/PR the branch so CI runs on the new commits (nothing pushed).
-  2. On the print-server PC: `git pull`, `pip install -r
-     requirements.txt`, restart the service, one real PDF print from the
-     phone (regression check through the new pipeline).
-  3. Run spikes T5, T6 (install LibreOffice first), T7; record results
-     in Section 5.
-  4. Only after T5's `--paper A4` check passes: optionally set
-     `PAPER_SIZE=A4` in `.env`.
+  1. **T6 only:** install LibreOffice on the print-server PC, run
+     `spike_t6_office.py`, record results in Section 5.
+  2. `PAPER_SIZE` may now be set in `.env` (e.g. `A4`) — T5 verified the
+     driver honors `-print-settings`; still optional (empty = driver
+     chooses).
+  3. One real print of each format from the phone once the service runs
+     with LibreOffice installed (the phone-side regression check).
 - ⚪ **Not started:** Phase 5 (queue management: cancel-while-converting,
   spooler purge via `win32print.SetJob`, retry, SQLite persistence),
   Phase 6 (reliability: printer pre-check, error catalog, log rotation),
@@ -565,7 +567,7 @@ This MVP deliberately has **no database, no authentication beyond "same Wi-Fi ne
 ## Open Items Requiring Testing (Summary)
 
 - 🟢 **Resolved (spikes run):** the spooler path works, the printer is detected, and the Windows "print" verb has no PDF handler on the tested machine — so **SumatraPDF is the chosen print engine** (Section 5 records the decision and the T4 PASS with real paper). Still worth re-confirming the whole chain on the old PC at deploy time.
-- 🔴 **Multi-format hardware gates (p10–p13 code landed, NOT yet verified on paper — 2026-08-29):** on the print-server PC run `spike_t5_images.py --paper A4`, then install LibreOffice and run `spike_t6_office.py`, then `spike_t7_text.py`; record results in Section 5. Until T5 passes, `PAPER_SIZE` must stay empty; until T6, office uploads are refused by the kill switch (expected behavior). Also push/merge branch `multiple-types-compatibility` so CI runs on the new commits.
+- 🟡 **Multi-format hardware gates (updated 2026-08-29):** **T5 (images) and T7 (TXT/CSV) PASS** on real paper — see Section 5. 🔴 Only **T6 (office)** remains: install LibreOffice on the print-server PC, run `spike_t6_office.py`, record results here. `PAPER_SIZE` may now be set in `.env` (the driver honors the flag, verified by T5). Branch pushed; CI runs on PR #1.
 - 🔴 If you later pursue Option C (Android's native `PrintService` framework, Section 6), treat IPP support and the `PrintService` implementation itself as a separate research phase — do not assume it's a small extension of the MVP.
 
 ---
