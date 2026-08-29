@@ -42,9 +42,15 @@ TEST_PRINTER = "EPSON L3210 Series"
 
 
 @pytest.fixture(autouse=True)
-def fresh_job_store(monkeypatch):
-    """Empty in-memory job store for every test (Section 12's dict)."""
-    monkeypatch.setattr(jobs, "_jobs", {})
+def fresh_job_store(tmp_path, monkeypatch):
+    """A fresh SQLite job store for every test (Section 12 → p14).
+
+    jobs.py keeps a module-level connection; pointing _db_path at a temp
+    file and dropping the cached connection makes every test start from an
+    empty database — the equivalent of the old fresh dict.
+    """
+    monkeypatch.setattr(jobs, "_db_path", tmp_path / "jobs.sqlite3")
+    monkeypatch.setattr(jobs, "_conn", None)
 
 
 @pytest.fixture(autouse=True)
@@ -103,6 +109,22 @@ def fake_win32print(monkeypatch) -> types.ModuleType:
         ("", "", TEST_PRINTER),
     ]
     fake.GetDefaultPrinter = lambda: TEST_PRINTER
+
+    # Spooler-queue surface for the p14 cancel purge. Tests populate
+    # _spooler_jobs with level-1 dicts (JobId, pDocument) and read
+    # setjob_calls to verify what was purged.
+    fake.JOB_CONTROL_DELETE = 3
+    fake._spooler_jobs = []
+    fake.setjob_calls = []
+    fake.OpenPrinter = lambda name: f"handle:{name}"
+    fake.ClosePrinter = lambda handle: None
+    fake.EnumJobs = lambda handle, first, count, level: list(fake._spooler_jobs)
+
+    def _set_job(handle, job_id, level, info, command):
+        fake.setjob_calls.append((handle, job_id, command))
+
+    fake.SetJob = _set_job
+
     monkeypatch.setitem(sys.modules, "win32print", fake)
     return fake
 

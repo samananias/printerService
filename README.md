@@ -129,6 +129,9 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
    documents need LibreOffice on the server (§1); DOCX/XLSX/PPTX convert in
    roughly 10–30 s — the page shows `converting` while that runs. TXT
    prints as monospace text, CSV as a bordered grid table.
+5. Failed jobs keep their uploaded file: the page shows a **🔁 Retry**
+   button, or `POST /jobs/{id}/retry`. Cancel works while queued,
+   converting, or printing (best-effort once handed to Windows).
 
 Other endpoints (also browsable interactively at `http://<ip>:8000/docs`):
 
@@ -139,7 +142,8 @@ Other endpoints (also browsable interactively at `http://<ip>:8000/docs`):
 | `POST /print` | Upload a file (PDF, image, Office document, or TXT/CSV) and print it |
 | `GET /jobs` | Recent jobs and their statuses |
 | `GET /jobs/{id}` | One job's status (what the page polls) |
-| `DELETE /jobs/{id}` | Cancel a job that hasn't printed yet |
+| `DELETE /jobs/{id}` | Cancel a job while queued, converting, or printing (best-effort once handed to Windows) |
+| `POST /jobs/{id}/retry` | Re-print a failed job from its stored upload — no re-upload needed |
 
 ---
 
@@ -157,6 +161,7 @@ Copy `.env.example` → `.env` and edit. All values are optional; defaults work.
 | `ENABLE_OFFICE` | `1` | Office-document printing (DOCX/XLSX/PPTX/ODF → PDF via LibreOffice). `0` = office uploads refused with a clear message, everything else unaffected |
 | `LO_PATH` | *(empty)* | Explicit path to `soffice.exe`. Empty = search standard install locations |
 | `CONVERT_TIMEOUT_S` | `120` | Seconds an office conversion may run before LibreOffice is killed |
+| `JOB_DB_PATH` | `logs/jobs.sqlite3` | SQLite job history (survives restarts; started jobs from a crashed run are marked failed at startup). Delete the file to reset history |
 | `HOST`, `PORT` | `8000` | Informational — actually pass them on the uvicorn command line (§3) |
 
 ---

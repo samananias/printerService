@@ -27,9 +27,9 @@ Claims are tagged like SOURCE_OF_TRUTH:
 - 🟡 **Follow-ups:** merge PR #1 when green; optionally set
   `PAPER_SIZE=A4` in `.env` (verified safe by T5); a phone smile-check of
   each format; LibreOffice install recipe now lives in README §1.
-- ⚪ **Next stage: Phase 5** (queue management: cancel-while-converting,
-  spooler purge, retry, SQLite persistence + startup recovery) — then
-  Phase 6 (reliability) and Phase 7/v2 (print options UI).
+- ⚪ **Next stage: Phase 6** (reliability: printer pre-check, error
+  catalog, log rotation) — Phase 5 landed in p14. Phase 7/v2 (print
+  options UI) after that.
 
 ---
 
@@ -240,6 +240,13 @@ AV scanning — ⚪ v2+ options.
 - **Phase 5 (p14) — queue management:** cancel while queued/converting;
   spooler purge via `win32print.SetJob` once printed; retry failed jobs;
   SQLite persistence (SOURCE_OF_TRUTH §12 upgrade path) + startup recovery.
+  **Landed in p14:** the job store moved to SQLite (`JOB_DB_PATH`, default
+  `logs/jobs.sqlite3`) behind the same function surface; cancellation now
+  works in every pre-done state (the pipeline checks between stages and
+  never marks a cancelled job done; the cancel endpoint purges our spooler
+  jobs by document name); `POST /jobs/{id}/retry` + a web Retry button
+  re-print failed jobs from the stored upload; startup recovery flips
+  interrupted jobs to failed.
 - **Phase 6 (p15) — reliability:** pre-dispatch printer-status check; error
   catalog (exit code → message); log rotation; startup recovery.
 - **Phase 7 (v2) — print options & dialog UI:** optional per-request

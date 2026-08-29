@@ -62,11 +62,16 @@ PAGE = """<!DOCTYPE html>
   <input type="password" id="pin" placeholder="PIN (only if the server set one)">
   <button id="printBtn" onclick="sendPrint()">Print</button>
   <div id="result"></div>
+  <button id="retryBtn" onclick="retryJob()"
+          style="display:none; margin-top:10px; background:#16a34a;">
+    🔁 Retry failed job
+  </button>
 </div>
 
 <script>
 const btn = document.getElementById("printBtn");
 const resultDiv = document.getElementById("result");
+const retryBtn = document.getElementById("retryBtn");
 
 // Client-side convenience only — the server re-checks everything
 // (extension allowlist + magic bytes) and never trusts the browser.
@@ -77,9 +82,38 @@ const OK_TYPES = [
   ".txt", ".csv",
 ];
 
+let failedJobId = null;
+
 function show(text, cls) {
   resultDiv.textContent = text;
   resultDiv.className = cls || "";
+}
+
+function retryControls(visible) {
+  retryBtn.style.display = visible ? "block" : "none";
+}
+
+// Re-print a failed job from its stored upload (p14) — no re-upload
+// needed. Resumes polling as if the job had just been queued.
+async function retryJob() {
+  if (!failedJobId) { return; }
+  const pin = document.getElementById("pin").value.trim();
+  const headers = pin ? { "X-API-PIN": pin } : {};
+  retryControls(false);
+  show("🔁 Retrying job " + failedJobId + "…", "ok");
+  try {
+    const response = await fetch("/jobs/" + failedJobId + "/retry",
+                                 { method: "POST", headers });
+    const data = await response.json();
+    if (response.ok) {
+      poll(failedJobId, 0);
+    } else {
+      show("❌ Retry refused: " + (data.detail || response.status), "err");
+    }
+  } catch (networkError) {
+    show("❌ Could not reach the server. Are you on the same Wi-Fi?",
+         "err");
+  }
 }
 
 async function sendPrint() {
@@ -149,15 +183,20 @@ async function poll(jobId, attempt) {
     }
     const job = await response.json();
     if (job.status === "done") {
+      retryControls(false);
       show("🖨️ Printed to " + (job.printer || "printer") + "!\\njob " + jobId,
            "ok");
       return;
     }
     if (job.status === "failed") {
-      show("❌ Print failed: " + (job.error || "unknown reason"), "err");
+      failedJobId = jobId;
+      retryControls(true);
+      show("❌ Print failed: " + (job.error || "unknown reason") +
+           "\\nYou can retry it from the stored copy.", "err");
       return;
     }
     if (job.status === "cancelled") {
+      retryControls(false);
       show("Job " + jobId + " was cancelled.", "err");
       return;
     }

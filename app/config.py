@@ -81,3 +81,8 @@ LO_PATH = _get("LO_PATH", "")
 # by the office processor's subprocess handling; images/text finish in well
 # under a second).
 CONVERT_TIMEOUT_S = int(_get("CONVERT_TIMEOUT_S", "120"))
+
+# Job history database (Phase 5): SQLite, SOURCE_OF_TRUTH §12's upgrade
+# path. Default lives under logs/ (git-ignored). Delete the file to reset
+# job history.
+JOB_DB_PATH = _get("JOB_DB_PATH", str(BASE_DIR / "logs" / "jobs.sqlite3"))

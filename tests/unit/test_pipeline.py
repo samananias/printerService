@@ -147,3 +147,80 @@ class TestConversionStage:
         wait_for_status("job-2", JobStatus.DONE)
 
         assert slow.max_in_process == 1  # the second never overlapped the first
+
+
+class TestCancellation:
+    """p14: a cancel wins over the next print stage, wherever it lands."""
+
+    @pytest.fixture
+    def gated_processor(self, monkeypatch):
+        """A converter that parks mid-conversion until its test releases it."""
+
+        class GatedProcessor:
+            def __init__(self):
+                self.entered = threading.Event()
+                self.release = threading.Event()
+
+            def process(self, src, out_dir):
+                self.entered.set()
+                self.release.wait(timeout=5)
+                return src
+
+        gated = GatedProcessor()
+        monkeypatch.setattr(pipeline, "for_category", lambda category: gated)
+        return gated
+
+    def test_cancel_during_conversion_never_prints(
+        self, job_with_pdf, mock_print, gated_processor, wait_until
+    ):
+        pipeline.start_job("job-1", job_with_pdf, category="office")
+        assert gated_processor.entered.wait(timeout=5)
+
+        ok, _ = jobs.cancel_job("job-1")  # while the conversion is parked
+        assert ok is True
+
+        gated_processor.release.set()
+        wait_until(
+            lambda: not job_with_pdf.exists(),
+            message="cancelled job's files should be cleaned up",
+        )
+
+        assert mock_print.called.is_set() is False  # nothing reached the printer
+        assert jobs.get_job("job-1").status == JobStatus.CANCELLED
+
+    def test_cancel_while_printing_keeps_cancelled_after_submit(
+        self, job_with_pdf, mock_print, tmp_upload_dir, wait_for_status, wait_until
+    ):
+        gate = threading.Event()
+        mock_print.gate = gate
+        pipeline.start_job("job-1", job_with_pdf)
+        wait_for_status("job-1", JobStatus.PRINTING)
+
+        ok, _ = jobs.cancel_job("job-1")  # the spooler purge runs in the API
+        assert ok is True
+
+        gate.set()
+        wait_until(
+            lambda: not job_with_pdf.exists(),
+            message="cancelled job's files should be cleaned up",
+        )
+
+        # Sumatra was handed the file (paper may come out — documented), but
+        # the pipeline must NOT mark the cancelled job done.
+        assert mock_print.called.is_set() is True
+        assert jobs.get_job("job-1").status == JobStatus.CANCELLED
+
+    def test_cancelled_before_the_thread_starts_is_never_processed(
+        self, job_with_pdf, mock_print
+    ):
+        jobs.cancel_job("job-1")  # cancel between create and start
+        pipeline.start_job("job-1", job_with_pdf)
+
+        import time
+
+        deadline = time.monotonic() + 2
+        while time.monotonic() < deadline and not mock_print.called.is_set():
+            time.sleep(0.01)
+
+        assert mock_print.called.is_set() is False
+        assert jobs.get_job("job-1").status == JobStatus.CANCELLED

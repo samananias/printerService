@@ -208,6 +208,44 @@ class TestSubmitPdfFallback:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# cancel_spooler_jobs — the p14 printing-stage cancel (best-effort purge)
+# ---------------------------------------------------------------------------
+
+
+class TestCancelSpoolerJobs:
+    def test_purges_only_jobs_whose_document_matches_the_job_id(
+        self, fake_win32print
+    ):
+        # SumatraPDF names spooler documents after the file it prints —
+        # <job_id>.pdf — so a prefix match finds OUR jobs (including
+        # multi-digit id prefixes like abc123-old) without tracking
+        # Windows job ids.
+        fake_win32print._spooler_jobs = [
+            {"JobId": 7, "pDocument": "abc123.pdf"},
+            {"JobId": 8, "pDocument": "other.pdf"},
+            {"JobId": 9, "pDocument": "abc123-old.pdf"},
+        ]
+
+        removed = windows.cancel_spooler_jobs(TEST_PRINTER, "abc123")
+
+        assert removed == 2
+        assert [call[1] for call in fake_win32print.setjob_calls] == [7, 9]
+        assert all(
+            call[2] == fake_win32print.JOB_CONTROL_DELETE
+            for call in fake_win32print.setjob_calls
+        )
+
+    def test_empty_queue_removes_nothing(self, fake_win32print):
+        assert windows.cancel_spooler_jobs(TEST_PRINTER, "abc123") == 0
+        assert fake_win32print.setjob_calls == []
+
+    def test_entries_without_a_document_name_are_tolerated(self, fake_win32print):
+        fake_win32print._spooler_jobs = [{"JobId": 5}]  # malformed entry
+
+        assert windows.cancel_spooler_jobs(TEST_PRINTER, "abc123") == 0
+
+
 class TestPywin32Presence:
     def test_missing_pywin32_fails_fast(self, monkeypatch, tmp_path):
         # Setting a sys.modules entry to None makes `import win32print`

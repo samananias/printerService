@@ -47,6 +47,13 @@ _conversion_lock = threading.Lock()
 
 def start_job(job_id: str, src: Path, category: str = "pdf") -> None:
     """Hand a freshly uploaded job to a background submission thread."""
+    current = jobs.get_job(job_id)
+    if current is not None and current.status == JobStatus.CANCELLED:
+        # The cancel raced in between upload and this call — queuing would
+        # resurrect it (update_status doesn't know better).
+        logger.info("job %s cancelled before it started — not queuing", job_id)
+        uploads.delete_job_files(job_id)
+        return
     jobs.update_status(job_id, JobStatus.QUEUED)
     threading.Thread(
         target=_process,
@@ -56,17 +63,51 @@ def start_job(job_id: str, src: Path, category: str = "pdf") -> None:
     ).start()
 
 
+def _cancelled(job_id: str) -> bool:
+    """Whether the user cancelled this job — checked between stages so a
+    cancel always wins over the next print step (p14)."""
+    job = jobs.get_job(job_id)
+    return job is not None and job.status == JobStatus.CANCELLED
+
+
+def _abandon(job_id: str, where: str) -> None:
+    """Clean up after a cancellation noticed at a stage boundary."""
+    uploads.delete_job_files(job_id)
+    logger.info("job %s cancelled %s — nothing further printed", job_id, where)
+
+
 def _process(job_id: str, src: Path, category: str) -> None:
     try:
+        if _cancelled(job_id):
+            _abandon(job_id, "before conversion")
+            return
+
         pdf_path = src
         processor = for_category(category)
         if processor is not None:
             jobs.update_status(job_id, JobStatus.CONVERTING)
             with _conversion_lock:
+                # The lock can be held by a slow office conversion — the
+                # cancel may have arrived while this thread was waiting.
+                if _cancelled(job_id):
+                    _abandon(job_id, "while waiting to convert")
+                    return
                 pdf_path = processor.process(src, src.parent)
+
+        if _cancelled(job_id):
+            _abandon(job_id, "after conversion")
+            return
 
         jobs.update_status(job_id, JobStatus.PRINTING)
         method, printer = windows.submit_pdf(pdf_path)
+
+        if _cancelled(job_id):
+            # The cancel endpoint purged the spooler queue best-effort; if
+            # paper still came out, that's the documented limit of a
+            # printing-stage cancel. The job stays cancelled regardless.
+            _abandon(job_id, "while printing")
+            return
+
         jobs.update_status(job_id, JobStatus.DONE, printer=printer)
         logger.info(
             "job %s (%s) submitted via %s to %r", job_id, category, method, printer
@@ -78,6 +119,6 @@ def _process(job_id: str, src: Path, category: str) -> None:
 
     except Exception as exc:
         logger.exception("job %s failed", job_id)
-        # Keep the stored file(s) on failure — useful for diagnosing, and the
-        # startup sweep (Phase 4) eventually clears them.
+        # Keep the stored file(s) on failure — useful for diagnosing, and
+        # what makes retry (p14) possible.
         jobs.update_status(job_id, JobStatus.FAILED, error=str(exc))

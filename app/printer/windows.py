@@ -75,6 +75,48 @@ def find_sumatra() -> str | None:
     return None
 
 
+def resolve_printer_name() -> str:
+    """The printer jobs are submitted to: PRINTER_NAME config, else the
+    Windows default. Used by submit_pdf and the cancel endpoint's spooler
+    purge."""
+    return PRINTER_NAME or get_default_printer()
+
+
+def cancel_spooler_jobs(printer_name: str, job_id: str) -> int:
+    """Best-effort removal of OUR queued jobs from the Windows spooler.
+
+    SumatraPDF names the spooler document after the file it prints, and
+    the service names that file <job_id>.pdf — so matching the document
+    name against job_id finds our jobs without tracking Windows job ids.
+    Best-effort per job: paper that already reached the printer cannot be
+    recalled. Returns how many spooler jobs were removed.
+    """
+    import win32print
+
+    handle = win32print.OpenPrinter(printer_name)
+    try:
+        removed = 0
+        for job in win32print.EnumJobs(handle, 0, -1, 1):
+            document = job.get("pDocument") or ""
+            if document.startswith(job_id):
+                try:
+                    win32print.SetJob(
+                        handle,
+                        job["JobId"],
+                        0,
+                        None,
+                        win32print.JOB_CONTROL_DELETE,
+                    )
+                    removed += 1
+                except Exception:
+                    logger.warning(
+                        "could not purge spooler job %s", job.get("JobId")
+                    )
+        return removed
+    finally:
+        win32print.ClosePrinter(handle)
+
+
 def submit_pdf(pdf_path: Path, printer_name: str | None = None) -> tuple[str, str]:
     """Print a PDF file. Returns (method_used, printer_name).
 
@@ -84,7 +126,7 @@ def submit_pdf(pdf_path: Path, printer_name: str | None = None) -> tuple[str, st
     import win32print  # noqa: F401 — fail fast if pywin32 is missing
 
     if printer_name is None:
-        printer_name = PRINTER_NAME or get_default_printer()
+        printer_name = resolve_printer_name()
 
     sumatra = find_sumatra()
     if sumatra:

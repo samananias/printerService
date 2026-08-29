@@ -412,11 +412,9 @@ Nothing here is over-engineered: every endpoint maps directly to something you'l
 
 **Do you need one for v1? No.**
 
-For a single-server, single-user, home-lab MVP, an **in-memory Python dictionary** (job ID → job info) is enough: it's simple, requires no setup, and is easy to reason about while you're still learning. Its one real downside — job history disappears if the service restarts — is not a problem worth solving yet.
+🟢 **As of p14 the store is SQLite** (`logs/jobs.sqlite3` by default, `JOB_DB_PATH` in `.env`) — the upgrade path below was taken once multi-format office jobs (tens of seconds each) made losing a queued job to a restart expensive, and "retry failed" needed the uploaded file's location to outlive the request. The function surface (`create_job`, `get_job`, `list_jobs`, `update_status`, `cancel_job`) is unchanged, so nothing outside `app/services/jobs.py` moved. Startup recovery marks jobs left in active states by a crashed run as failed — their uploads are already swept, so they can't be retried.
 
-- **In-memory storage** 🔵 recommended for v1 — zero setup, perfect for learning, data doesn't survive a restart (acceptable for now).
-- **JSON file** 🟡 alternative — barely more effort than in-memory, and survives restarts; reasonable "Phase 6" upgrade if you want job history to persist.
-- **SQLite** ⚪ future improvement — worth learning once you actually feel the pain of losing history, or if you want to practice real database concepts (queries, schemas) as a deliberate next-step exercise, not before.
+The progression was: **in-memory dict** (v1 — zero setup, ideal while learning) → **SQLite** (p14 — one file, no server). A JSON file was considered as the intermediate step but SQLite came at the same effort. Anything heavier (Postgres, a DB server) would only make sense with many machines or users — explicitly out of scope (§16).
 
 ---
 
