@@ -26,6 +26,7 @@ PAGE_SIZES_PT = {
     "a5": (420, 595),
     "letter": (612, 792),
     "legal": (612, 1008),
+    "long-bond": (612, 936),  # 8.5×13" — bond-paper sizing (Phase 7)
 }
 DEFAULT_PAGE = "a4"
 

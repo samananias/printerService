@@ -27,10 +27,10 @@ or lying extension), 413 (too large), 500 (disk trouble).
 import logging
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
 from app.detection import DEFAULT_EXTENSIONS
-from app.models.printing import PrintAccepted
+from app.models.printing import PrintAccepted, validate_print_options
 from app.services import jobs, pipeline
 from app.services.auth import require_pin
 from app.services.uploads import UploadError, save_upload, validate_upload
@@ -42,10 +42,17 @@ logger = logging.getLogger(__name__)
 @router.post("/print", response_model=PrintAccepted, status_code=201)
 async def print_file(
     file: UploadFile = File(...),
+    copies: int = Form(1),
+    pages: str = Form(""),
+    paper: str = Form(""),
+    color_mode: str = Form("color"),
     _: None = Depends(require_pin),  # PIN required only when API_PIN is set
 ):
     """Accept a file exactly like a web form uploads a photo: a
-    multipart/form-data POST whose file field is named "file"."""
+    multipart/form-data POST whose file field is named "file".
+
+    The print options (copies, pages, paper, color_mode) are all optional
+    with safe defaults — Phase 7; see PrintOptions for the allowlists."""
     data = await file.read()
     filename = file.filename or ""
 
@@ -54,6 +61,12 @@ async def print_file(
     except UploadError as exc:
         logger.warning("rejected upload %r: %s", filename, exc)
         raise HTTPException(status_code=exc.status_code, detail=str(exc))
+
+    try:
+        options = validate_print_options(copies, pages, paper, color_mode).model_dump()
+    except ValueError as exc:
+        logger.warning("rejected upload %r: bad print options: %s", filename, exc)
+        raise HTTPException(status_code=422, detail=str(exc))
 
     # Store under the real extension; a client that sent no usable filename
     # gets the canonical one for its (magic-proven) category.
@@ -67,8 +80,11 @@ async def print_file(
         logger.exception("could not store upload %r", filename)
         raise HTTPException(status_code=500, detail=f"Could not store upload: {exc}")
 
-    jobs.create_job(job_id, filename or f"unknown{ext}", len(data), path, format=category)
-    pipeline.start_job(job_id, path, category)
+    jobs.create_job(
+        job_id, filename or f"unknown{ext}", len(data), path, format=category,
+        options=options,
+    )
+    pipeline.start_job(job_id, path, category, options=options)
     logger.info(
         "job %s received: %s (%d bytes, %s)", job_id, filename, len(data), category
     )

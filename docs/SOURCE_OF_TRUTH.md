@@ -399,12 +399,13 @@ Keep it this flat at first — you can split `api/`, `printer/`, etc. further on
 |---|---|---|---|---|
 | `/health` | GET | none | `{"status": "ok"}` | Lets you (or the phone) quickly confirm the server is reachable and running, independent of printing logic — the first thing to check when something's wrong. |
 | `/printers` | GET | none | List of available printer names (from `pywin32`) | Confirms Windows/the driver can see the L3210 at all, and leaves room for multiple printers later. |
-| `/print` | POST | A file upload (PDF) + optional printer name | `{"job_id": "...", "status": "queued"}` | The core action: accept a file and start a print job. |
+| `/print` | POST | A file upload (any supported format) + **optional print options**: `copies` (1–99), `pages` (`2-6`, `1,3,5`, `odd`/`even` — strict allowlist), `paper` (a4/letter/legal/a3/a5/long-bond), `color_mode` (color/monochrome) — Phase 7 | `{"job_id": "...", "status": "queued"}` | The core action: accept a file and start a print job. Options apply to every format because everything is normalized to PDF before the engine runs; they're stored on the job so a retry reprints identically. |
 | `/jobs` | GET | none | List of recent jobs and their statuses | Lets the phone (or you) see what's happened/is happening, without re-printing. |
 | `/jobs/{id}` | GET | job id in URL | Status of one specific job | Lets the UI poll "is my print done yet?" |
 | `/jobs/{id}` | DELETE | job id in URL | Confirmation / error | Lets you cancel a queued job — useful once you've accidentally queued the wrong file (you will). |
+| `/jobs/{id}/retry` | POST | job id in URL | The job re-queued | Re-print a failed job from its stored upload (p14) — no re-upload needed. |
 
-Nothing here is over-engineered: every endpoint maps directly to something you'll actually need while testing the system by hand in Phase 3–6.
+Nothing here is over-engineered: every endpoint maps directly to something you'll actually need while testing the system by hand.
 
 ---
 

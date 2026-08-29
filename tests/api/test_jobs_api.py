@@ -114,6 +114,26 @@ class TestRetryJob:
         job = wait_for_status("abc123", JobStatus.DONE)
         assert job.error is None  # the retry started clean and succeeded
 
+    def test_retry_reuses_the_original_print_options(
+        self, client, tmp_upload_dir, mock_print, wait_for_status
+    ):
+        src = tmp_upload_dir / "abc123.pdf"
+        src.write_bytes(b"%PDF-1.4 x")
+        options = {
+            "copies": 2,
+            "pages": "",
+            "paper": "a4",
+            "color_mode": "monochrome",
+        }
+        jobs.create_job("abc123", "file.pdf", 9, src, format="pdf", options=options)
+        jobs.update_status("abc123", JobStatus.FAILED, error="printer offline")
+
+        response = client.post("/jobs/abc123/retry")
+
+        assert response.status_code == 200
+        wait_for_status("abc123", JobStatus.DONE)
+        assert mock_print.options == options  # the retry prints like the original
+
     def test_retry_unknown_job_404(self, client):
         assert client.post("/jobs/ghost/retry").status_code == 404
 

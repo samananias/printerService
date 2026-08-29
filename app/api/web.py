@@ -50,6 +50,11 @@ PAGE = """<!DOCTYPE html>
            word-break: break-word; }
   .ok    { color: #166534; }
   .err   { color: #b91c1c; }
+  .opt   { display: block; text-align: left; font-size: .85rem;
+           color: #445; margin-bottom: 10px; }
+  .opt input, .opt select { width: 100%; margin-top: 4px; padding: 8px;
+           box-sizing: border-box; border: 1px solid #ccd;
+           border-radius: 6px; background: #fff; }
 </style>
 </head>
 <body>
@@ -66,6 +71,35 @@ PAGE = """<!DOCTYPE html>
           style="display:none; margin-top:10px; background:#16a34a;">
     🔁 Retry failed job
   </button>
+
+  <details style="margin-top:14px;">
+    <summary style="cursor:pointer; font-size:.85rem; color:#667;">
+      Print options
+    </summary>
+    <label class="opt">Copies
+      <input type="number" id="copies" min="1" max="99" value="1">
+    </label>
+    <label class="opt">Pages
+      <input type="text" id="pages" placeholder="all — or 1-3,5 or odd/even">
+    </label>
+    <label class="opt">Paper
+      <select id="paper">
+        <option value="">Printer default</option>
+        <option value="a4">A4</option>
+        <option value="letter">Letter (short bond)</option>
+        <option value="long-bond">Long bond (8.5×13)</option>
+        <option value="legal">Legal</option>
+        <option value="a3">A3</option>
+        <option value="a5">A5</option>
+      </select>
+    </label>
+    <label class="opt">Color
+      <select id="colorMode">
+        <option value="color">Color</option>
+        <option value="monochrome">Black &amp; white</option>
+      </select>
+    </label>
+  </details>
 </div>
 
 <script>
@@ -136,6 +170,12 @@ async function sendPrint() {
   try {
     const body = new FormData();
     body.append("file", file);            // field name must be "file"
+
+    // Print options (Phase 7) — all optional; empty fields mean defaults.
+    body.append("copies", document.getElementById("copies").value || "1");
+    body.append("pages", document.getElementById("pages").value.trim());
+    body.append("paper", document.getElementById("paper").value);
+    body.append("color_mode", document.getElementById("colorMode").value);
 
     // Send the PIN header only if the user typed one; the server ignores
     // it entirely when no PIN is configured (auth disabled).

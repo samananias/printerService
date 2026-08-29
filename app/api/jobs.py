@@ -103,6 +103,6 @@ def retry(job_id: str, _: None = Depends(require_pin)):
         )
 
     jobs.reset_for_retry(job_id)
-    pipeline.start_job(job_id, source[0], source[1])
+    pipeline.start_job(job_id, source[0], source[1], options=job.options)
     logger.info("job %s queued for retry", job_id)
     return jobs.get_job(job_id)

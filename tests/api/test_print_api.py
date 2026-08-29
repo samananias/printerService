@@ -182,6 +182,63 @@ class TestPrintRejections:
         assert "pdf" in response.json()["detail"].lower()
 
 
+    def test_print_options_reach_the_pipeline(
+        self, client, pdf_bytes, mock_print, wait_for_status
+    ):
+        response = client.post(
+            "/print",
+            files={"file": ("report.pdf", pdf_bytes, "application/pdf")},
+            data={
+                "copies": "2",
+                "pages": "1-3",
+                "paper": "a4",
+                "color_mode": "monochrome",
+            },
+        )
+
+        assert response.status_code == 201
+        job_id = response.json()["job_id"]
+        wait_for_status(job_id, "done")
+
+        assert mock_print.options == {
+            "copies": 2,
+            "pages": "1-3",
+            "paper": "a4",
+            "color_mode": "monochrome",
+        }
+
+    def test_defaults_store_safe_print_options(
+        self, client, pdf_bytes, mock_print, wait_for_status
+    ):
+        job_id = post_pdf(client, pdf_bytes).json()["job_id"]
+        wait_for_status(job_id, "done")
+
+        # No options sent → the defaults, which build NO print-settings —
+        # the exact command spike T4 proved on real paper.
+        assert mock_print.options == {
+            "copies": 1,
+            "pages": "",
+            "paper": "",
+            "color_mode": "color",
+        }
+
+    def test_invalid_print_options_rejected_with_422(self, client, pdf_bytes, mock_print):
+        for bad_data in (
+            {"copies": "100"},
+            {"pages": "drop tables"},
+            {"paper": "glossy"},
+            {"color_mode": "sepia"},
+        ):
+            response = client.post(
+                "/print",
+                files={"file": ("report.pdf", pdf_bytes, "application/pdf")},
+                data=bad_data,
+            )
+            assert response.status_code == 422, bad_data
+
+        assert mock_print.called.is_set() is False  # nothing ever printed
+
+
 class TestPrintErrors:
     def test_disk_failure_returns_500(self, client, pdf_bytes, monkeypatch, mock_print):
         def broken_save(data, ext=".pdf"):

@@ -267,6 +267,13 @@ AV scanning — ⚪ v2+ options.
   everything is a PDF by print time. Duplex/quality/tray hidden (L3210 has
   no duplex hardware, one tray). A print preview (serve the intermediate
   PDF to the phone before printing) comes nearly free later.
+  **Landed in p16:** `PrintOptions` + strict validation
+  (`validate_print_options`, 422 on violations), `build_print_settings()`
+  in the print engine (request paper overrides `PAPER_SIZE`; defaults
+  still build NO settings — the T4-proven command), options stored on the
+  job (JSON column + migration for older DBs) and reused by retry, web
+  page gains the collapsible print-options dialog, `spike_t5 --paper
+  long-bond` ready for the 8.5×13 check.
 
 Each phase: ruff + pytest + ≥90 % coverage gate; README +
 SOURCE_OF_TRUTH updated; one commit per phase (p10, p11, …).
@@ -356,5 +363,6 @@ cut off at the right margin.
       optional — empty = driver chooses).
 - [x] Windows version confirmed: Windows 11 (current LibreOffice fine,
       no 7.6.x pin needed).
-- [ ] Phase 7: verify long-bond paper (8.5×13) on the Epson driver
-      (custom mm size vs driver paper name).
+- [ ] Phase 7: verify long-bond paper (8.5×13) on the Epson driver —
+      `python spike_t5_images.py --paper long-bond` (custom mm size, the
+      exact token the print-settings builder uses).

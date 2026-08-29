@@ -140,6 +140,26 @@ class TestSubmitPdfSumatraPath:
             windows.submit_pdf(tmp_path / "doc.pdf")
 
 
+    def test_print_options_build_the_settings_flag(
+        self, fake_win32print, tmp_path, monkeypatch, recorded_run
+    ):
+        from app.models.printing import PrintOptions
+
+        monkeypatch.setattr(windows, "PAPER_SIZE", "")
+        monkeypatch.setattr(windows, "find_sumatra", lambda: "C:/SumatraPDF.exe")
+        options = PrintOptions(
+            copies=2, pages="2-6", paper="a4", color_mode="monochrome"
+        )
+
+        windows.submit_pdf(tmp_path / "doc.pdf", options=options)
+
+        assert recorded_run["cmd"][3:5] == [
+            "-print-settings",
+            "paper=A4,fit,2x,collate,2-6,monochrome",
+        ]
+        assert recorded_run["cmd"][5:] == ["-silent", str(tmp_path / "doc.pdf")]
+
+
 class TestPrintSettings:
     """PAPER_SIZE is opt-in (docs/MULTI_FORMAT_PLAN.md §13 assumption #3):
     empty = no print-settings flag at all, the driver chooses the paper —

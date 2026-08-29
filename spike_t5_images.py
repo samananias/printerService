@@ -119,7 +119,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--paper",
-        choices=["a4", "letter", "legal", "a5", "a3"],
+        choices=["a4", "letter", "legal", "a5", "a3", "long-bond"],
         type=str.lower,
         help="also print one copy with -print-settings paper=<X>,fit",
     )
@@ -175,7 +175,16 @@ def main() -> int:
         if args.paper:
             try:
                 pdf_path = processor.process(temp_dir / "t5_1_gradient.jpg", temp_dir)
-                print_pdf(sumatra, pdf_path, printer_name, f"paper={args.paper},fit")
+                # long-bond (8.5×13") goes as Sumatra's custom mm size —
+                # the exact token the service's print-settings builder uses.
+                settings_token = (
+                    "paper=215.9mm x 330.2mm"
+                    if args.paper == "long-bond"
+                    else f"paper={args.paper}"
+                )
+                print_pdf(
+                    sumatra, pdf_path, printer_name, settings_token + ",fit"
+                )
                 results.append(
                     (
                         f"T5 paper={args.paper} via -print-settings",

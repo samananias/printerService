@@ -45,8 +45,17 @@ logger = logging.getLogger(__name__)
 _conversion_lock = threading.Lock()
 
 
-def start_job(job_id: str, src: Path, category: str = "pdf") -> None:
-    """Hand a freshly uploaded job to a background submission thread."""
+def start_job(
+    job_id: str,
+    src: Path,
+    category: str = "pdf",
+    options: dict | None = None,
+) -> None:
+    """Hand a freshly uploaded job to a background submission thread.
+
+    `options` is the job's stored print-options dict (copies, pages,
+    paper, color_mode) — retried jobs reuse theirs (p14 + Phase 7).
+    """
     current = jobs.get_job(job_id)
     if current is not None and current.status == JobStatus.CANCELLED:
         # The cancel raced in between upload and this call — queuing would
@@ -57,7 +66,7 @@ def start_job(job_id: str, src: Path, category: str = "pdf") -> None:
     jobs.update_status(job_id, JobStatus.QUEUED)
     threading.Thread(
         target=_process,
-        args=(job_id, src, category),
+        args=(job_id, src, category, options),
         name=f"print-{job_id}",
         daemon=True,  # never block service shutdown on a stuck print job
     ).start()
@@ -76,7 +85,9 @@ def _abandon(job_id: str, where: str) -> None:
     logger.info("job %s cancelled %s — nothing further printed", job_id, where)
 
 
-def _process(job_id: str, src: Path, category: str) -> None:
+def _process(
+    job_id: str, src: Path, category: str, options: dict | None = None
+) -> None:
     try:
         if _cancelled(job_id):
             _abandon(job_id, "before conversion")
@@ -99,7 +110,7 @@ def _process(job_id: str, src: Path, category: str) -> None:
             return
 
         jobs.update_status(job_id, JobStatus.PRINTING)
-        method, printer = windows.submit_pdf(pdf_path)
+        method, printer = windows.submit_pdf(pdf_path, options=options)
 
         if _cancelled(job_id):
             # The cancel endpoint purged the spooler queue best-effort; if

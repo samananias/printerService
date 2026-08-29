@@ -30,6 +30,7 @@ the cancelled status after each stage and never marks a cancelled job
 done.
 """
 
+import json
 import sqlite3
 import threading
 from datetime import datetime, timezone
@@ -70,6 +71,8 @@ def _get_conn() -> sqlite3.Connection:
 
     check_same_thread=False: access is serialized by _lock instead, which
     also guards the check-then-modify sequences the dict version needed.
+    The ALTER migrates databases created before Phase 7 — they lack the
+    options column; "duplicate column" means the migration already ran.
     """
     global _conn
     if _conn is None:
@@ -77,6 +80,10 @@ def _get_conn() -> sqlite3.Connection:
         _conn = sqlite3.connect(_db_path, check_same_thread=False)
         _conn.row_factory = sqlite3.Row
         _conn.execute(_SCHEMA)
+        try:
+            _conn.execute("ALTER TABLE jobs ADD COLUMN options TEXT")
+        except sqlite3.OperationalError:
+            pass  # column exists — either fresh schema or already migrated
         _conn.commit()
     return _conn
 
@@ -86,6 +93,12 @@ def _now() -> str:
 
 
 def _to_job(row: sqlite3.Row) -> PrintJob:
+    options = None
+    if row["options"]:
+        try:
+            options = json.loads(row["options"])
+        except json.JSONDecodeError:
+            options = None  # corrupt JSON must not 500 a status poll
     return PrintJob(
         job_id=row["job_id"],
         filename=row["filename"],
@@ -96,6 +109,7 @@ def _to_job(row: sqlite3.Row) -> PrintJob:
         printer=row["printer"],
         error=row["error"],
         format=row["format"],
+        options=options,
     )
 
 
@@ -105,20 +119,31 @@ def create_job(
     size_bytes: int,
     path: Path,
     format: str | None = None,
+    options: dict | None = None,
 ) -> PrintJob:
     """Register a freshly uploaded file as a tracked job.
 
     `format` is the detected category from upload validation; the file's
-    location and category are stored alongside it so a failed job can be
-    retried (p14).
+    location, category and print options (Phase 7) are stored alongside it
+    so a failed job can be retried exactly as it was submitted.
     """
     now = _now()
     with _lock:
         _get_conn().execute(
             "INSERT INTO jobs (job_id, filename, size_bytes, status, created_at,"
-            " updated_at, format, source_path, category)"
-            " VALUES (?, ?, ?, 'received', ?, ?, ?, ?, ?)",
-            (job_id, filename, size_bytes, now, now, format, str(path), format),
+            " updated_at, format, source_path, category, options)"
+            " VALUES (?, ?, ?, 'received', ?, ?, ?, ?, ?, ?)",
+            (
+                job_id,
+                filename,
+                size_bytes,
+                now,
+                now,
+                format,
+                str(path),
+                format,
+                json.dumps(options) if options else None,
+            ),
         )
         _get_conn().commit()
         row = _get_conn().execute(

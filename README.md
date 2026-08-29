@@ -132,6 +132,11 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 5. Failed jobs keep their uploaded file: the page shows a **🔁 Retry**
    button, or `POST /jobs/{id}/retry`. Cancel works while queued,
    converting, or printing (best-effort once handed to Windows).
+6. **Print options** (under "Print options" on the page, all optional):
+   copies (1–99), page selection (`2-6`, `1,3,5`, `odd`/`even`), paper
+   size (A4, short/long bond, legal, A3, A5), and black & white. They
+   apply to every format, are stored with the job, and a retry reuses
+   them.
 
 Other endpoints (also browsable interactively at `http://<ip>:8000/docs`):
 

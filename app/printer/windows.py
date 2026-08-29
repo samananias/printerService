@@ -30,7 +30,7 @@ import subprocess
 from pathlib import Path
 
 from app.config import PAPER_SIZE, PRINTER_NAME, SUMATRA_PATH
-from app.models.printing import PrinterInfo
+from app.models.printing import PrinterInfo, PrintOptions
 
 logger = logging.getLogger(__name__)
 
@@ -137,6 +137,48 @@ def printer_ready(printer_name: str) -> tuple[bool, str]:
     return True, ""
 
 
+# Phase 7: per-request paper keys → Sumatra's -print-settings tokens.
+# Keys mirror models.printing.PAPER_CHOICES; "long-bond" is 8.5×13" —
+# Sumatra takes custom sizes in mm (one spike line still owes a real-paper
+# check of this size: MULTI_FORMAT_PLAN §15).
+PAPER_TOKENS = {
+    "a4": "paper=A4",
+    "a3": "paper=A3",
+    "a5": "paper=A5",
+    "letter": "paper=letter",
+    "legal": "paper=legal",
+    "long-bond": "paper=215.9mm x 330.2mm",
+}
+
+
+def build_print_settings(options: PrintOptions | None) -> str | None:
+    """The -print-settings value for these options — None when nothing is
+    requested, which keeps the no-options command byte-identical to the
+    T4-proven one.
+
+    Precedence: the request's paper beats the PAPER_SIZE config; "fit"
+    rides along only when a paper size is named (it prevents clipping when
+    page and paper disagree) — copies/pages/monochrome alone must not
+    rescale a document that would have printed 1:1.
+    """
+    options = options or PrintOptions()
+    tokens: list[str] = []
+
+    paper = (options.paper or PAPER_SIZE).strip().lower()
+    if paper:
+        tokens.append(PAPER_TOKENS.get(paper, f"paper={paper}"))
+        tokens.append("fit")
+    if options.copies > 1:
+        tokens.append(f"{options.copies}x")
+        tokens.append("collate")
+    if options.pages:
+        tokens.append(options.pages)
+    if options.color_mode == "monochrome":
+        tokens.append("monochrome")
+
+    return ",".join(tokens) if tokens else None
+
+
 def resolve_printer_name() -> str:
     """The printer jobs are submitted to: PRINTER_NAME config, else the
     Windows default. Used by submit_pdf and the cancel endpoint's spooler
@@ -179,7 +221,11 @@ def cancel_spooler_jobs(printer_name: str, job_id: str) -> int:
         win32print.ClosePrinter(handle)
 
 
-def submit_pdf(pdf_path: Path, printer_name: str | None = None) -> tuple[str, str]:
+def submit_pdf(
+    pdf_path: Path,
+    printer_name: str | None = None,
+    options: PrintOptions | None = None,
+) -> tuple[str, str]:
     """Print a PDF file. Returns (method_used, printer_name).
 
     Raises RuntimeError with a human-readable reason on any failure — the
@@ -200,12 +246,13 @@ def submit_pdf(pdf_path: Path, printer_name: str | None = None) -> tuple[str, st
     if sumatra:
         logger.info("printing %s via SumatraPDF to %r", pdf_path.name, printer_name)
         cmd = [sumatra, "-print-to", printer_name]
-        if PAPER_SIZE:
-            # Opt-in paper pinning (PAPER_SIZE in .env). Empty = no print
-            # settings at all — the driver chooses, which is the exact
-            # behavior spike T4 proved on real paper. "fit" scales content
-            # instead of clipping it when page and paper disagree.
-            cmd += ["-print-settings", f"paper={PAPER_SIZE},fit"]
+        settings = build_print_settings(options)
+        if settings:
+            # Phase 7 print options (copies, pages, paper, color) and/or
+            # the PAPER_SIZE config. Empty = no print settings at all —
+            # the driver chooses, which is the exact behavior spike T4
+            # proved on real paper.
+            cmd += ["-print-settings", settings]
         cmd += ["-silent", str(pdf_path)]
         result = subprocess.run(
             cmd,

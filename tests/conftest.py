@@ -147,10 +147,12 @@ class FakePrintResult:
         self.error: Exception | None = None
         self.pdf_path: Path | None = None
         self.printer_name: str | None = None
+        self.options: dict | None = None
 
-    def __call__(self, pdf_path, printer_name=None):
+    def __call__(self, pdf_path, printer_name=None, options=None):
         self.pdf_path = pdf_path
         self.printer_name = printer_name
+        self.options = options
         self.called.set()
         if self.gate is not None:
             self.gate.wait(timeout=10)

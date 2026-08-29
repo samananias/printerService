@@ -141,6 +141,33 @@ class TestSourceAndRetry:
     def test_source_of_unknown_job_is_none(self):
         assert jobs.get_source("ghost") is None
 
+    def test_options_roundtrip(self, tmp_path):
+        src = tmp_path / "job-1.pdf"
+        options = {
+            "copies": 2,
+            "pages": "1-3",
+            "paper": "a4",
+            "color_mode": "monochrome",
+        }
+        jobs.create_job("job-1", "file.pdf", 9, src, format="pdf", options=options)
+
+        assert jobs.get_job("job-1").options == options
+
+    def test_job_without_options_reads_as_none(self, tmp_path):
+        jobs.create_job("job-1", "file.pdf", 9, tmp_path / "job-1.pdf")
+
+        assert jobs.get_job("job-1").options is None
+
+    def test_corrupt_options_json_never_breaks_the_store(self, tmp_path):
+        jobs.create_job("job-1", "file.pdf", 9, tmp_path / "job-1.pdf")
+        with jobs._lock:
+            jobs._get_conn().execute(
+                "UPDATE jobs SET options = '{not json' WHERE job_id = 'job-1'"
+            )
+            jobs._get_conn().commit()
+
+        assert jobs.get_job("job-1").options is None
+
     def test_reset_for_retry_revives_only_failed_jobs(self, tmp_path):
         src = tmp_path / "job-1.pdf"
         jobs.create_job("job-1", "file.pdf", 9, src)
