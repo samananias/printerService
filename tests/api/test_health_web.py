@@ -31,3 +31,17 @@ class TestWebPage:
         assert 'type="file"' in page  # the PDF picker
         assert ">Print<" in page  # the button that POSTs /print
         assert "/print" in page  # the endpoint the page's JS calls
+        assert 'href="/favicon.svg"' in page
+
+    def test_favicon_svg_served(self, client):
+        response = client.get("/favicon.svg")
+        assert response.status_code == 200
+        assert "image/svg+xml" in response.headers["content-type"]
+        assert "<svg" in response.text
+
+    def test_favicon_ico_served(self, client):
+        response = client.get("/favicon.ico")
+        assert response.status_code == 200
+        assert "image/svg+xml" in response.headers["content-type"]
+        assert "<svg" in response.text
+

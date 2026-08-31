@@ -20,15 +20,44 @@ point of view):
 """
 
 from fastapi import APIRouter
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 
 router = APIRouter()
+
+FAVICON_SVG = """<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 512 512" width="512" height="512"
+     role="img" aria-labelledby="ps-title ps-desc">
+  <title id="ps-title">PrinterService</title>
+  <desc id="ps-desc">A smartphone feeding into a printer printing a Wi-Fi page.</desc>
+  <g id="printerservice-mark" transform="translate(256 256) scale(1.15) translate(-256 -256)">
+    <rect id="body" x="112" y="197" width="288" height="174" rx="30" fill="#24272E"/>
+    <rect id="page" x="194" y="325" width="124" height="120" rx="10" fill="#FFD84D"
+          stroke="#1A1C20" stroke-width="9"/>
+    <rect id="output-slot" x="188" y="319" width="136" height="14" rx="7" fill="#FFFFFF"/>
+    <g id="wifi" fill="none" stroke="#00AEEF" stroke-width="8" stroke-linecap="round">
+      <path d="M 228.4 399.4 A 39 39 0 0 1 283.6 399.4"/>
+      <path d="M 236.9 407.9 A 27 27 0 0 1 275.1 407.9"/>
+      <path d="M 245.4 416.4 A 15 15 0 0 1 266.6 416.4"/>
+    </g>
+    <circle id="wifi-dot" cx="256" cy="427" r="6.5" fill="#00AEEF"/>
+    <rect id="input-slot" x="184" y="207" width="144" height="22" rx="11" fill="#FFFFFF"/>
+    <g id="phone">
+      <rect x="204" y="67" width="104" height="160" rx="26" fill="#E6007E"/>
+      <rect x="216" y="81" width="80" height="112" rx="13" fill="#FFFFFF"/>
+      <rect x="236" y="207" width="40" height="6" rx="3" fill="#FFFFFF"/>
+    </g>
+    <rect id="input-slot-lip" x="184" y="221" width="144" height="8" fill="#24272E"/>
+    <circle id="led" cx="350" cy="267" r="9" fill="#00AEEF"/>
+  </g>
+</svg>"""
 
 PAGE = """<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="alternate icon" type="image/svg+xml" href="/favicon.ico">
 <title>Printer Service</title>
 <style>
   body   { font-family: system-ui, sans-serif; background: #f0f4f8;
@@ -37,7 +66,9 @@ PAGE = """<!DOCTYPE html>
   .card  { background: #fff; border-radius: 12px; padding: 24px;
            margin: 16px; max-width: 380px; width: 100%;
            box-shadow: 0 2px 10px rgba(0,0,0,.12); }
-  h1     { font-size: 1.3rem; margin: 0 0 4px; }
+  .header{ display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+  .header img { width: 32px; height: 32px; }
+  h1     { font-size: 1.3rem; margin: 0; }
   p.sub  { color: #667; margin: 0 0 18px; font-size: .9rem; }
   input[type=file] { width: 100%; margin-bottom: 14px; }
   input[type=password] { width: 100%; margin-bottom: 14px; padding: 8px;
@@ -59,7 +90,10 @@ PAGE = """<!DOCTYPE html>
 </head>
 <body>
 <div class="card">
-  <h1>🖨️ Printer Service</h1>
+  <div class="header">
+    <img src="/favicon.svg" alt="PrinterService Logo">
+    <h1>Printer Service</h1>
+  </div>
   <p class="sub">Pick a PDF, image, Office, or text file and send it to the printer.</p>
 
   <input type="file" id="file"
@@ -256,3 +290,11 @@ async function poll(jobId, attempt) {
 def index():
     """Serve the upload page. Opening the server's URL on the phone IS the app."""
     return PAGE
+
+
+@router.get("/favicon.svg", include_in_schema=False)
+@router.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    """Serve the SVG icon for browser tabs."""
+    return Response(content=FAVICON_SVG, media_type="image/svg+xml")
+

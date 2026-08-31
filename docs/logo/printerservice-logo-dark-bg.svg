@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 582 200" width="582" height="200" role="img" aria-labelledby="pswd-title pswd-desc">
+  <title id="pswd-title">PrinterService</title>
+  <desc id="pswd-desc">PrinterService wordmark: a smartphone feeding into a printer that prints a page carrying a Wi-Fi symbol.</desc>
+
+  <!--
+    PrinterService horizontal lockup for DARK backgrounds (icon + wordmark)
+    Uses the same mark as printerservice-icon.svg.
+    Palette (CMYK-inspired):
+      Cyan    #00AEEF  wireless / status
+      Magenta #E6007E  phone + "Service"
+      Yellow  #FFD84D  printed page
+      Dark    #24272E  printer body + "Printer"
+  -->
+  <g id="lockup">
+
+    <!-- Mark -->
+    <g transform="translate(20 28) scale(0.28)">
+      <g id="printerservice-mark" transform="translate(256 256) scale(1.15) translate(-256 -256)">
+        <!-- Printer body -->
+        <rect id="body" x="112" y="197" width="288" height="174" rx="30" fill="#24272E"/>
+        <!-- Output page emerging from the front slot -->
+        <rect id="page" x="194" y="325" width="124" height="120" rx="10" fill="#FFD84D" stroke="#1A1C20" stroke-width="9"/>
+        <rect id="output-slot" x="188" y="319" width="136" height="14" rx="7" fill="#FFFFFF"/>
+        <!-- Wi-Fi symbol printed on the page -->
+        <g id="wifi" fill="none" stroke="#00AEEF" stroke-width="8" stroke-linecap="round">
+          <path d="M 228.4 399.4 A 39 39 0 0 1 283.6 399.4"/>
+          <path d="M 236.9 407.9 A 27 27 0 0 1 275.1 407.9"/>
+          <path d="M 245.4 416.4 A 15 15 0 0 1 266.6 416.4"/>
+        </g>
+        <circle id="wifi-dot" cx="256" cy="427" r="6.5" fill="#00AEEF"/>
+        <!-- Paper-input slot with phone -->
+        <rect id="input-slot" x="184" y="207" width="144" height="22" rx="11" fill="#FFFFFF"/>
+        <g id="phone">
+          <rect x="204" y="67" width="104" height="160" rx="26" fill="#E6007E"/>
+          <rect x="216" y="81" width="80" height="112" rx="13" fill="#FFFFFF"/>
+          <rect x="236" y="207" width="40" height="6" rx="3" fill="#FFFFFF"/>
+        </g>
+        <rect id="input-slot-lip" x="184" y="221" width="144" height="8" fill="#24272E"/>
+        <!-- Status LED -->
+        <circle id="led" cx="350" cy="267" r="9" fill="#00AEEF"/>
+      </g>
+    </g>
+
+    <!-- Wordmark -->
+    <text id="wordmark" x="190" y="120" font-family="'Segoe UI', -apple-system, 'Helvetica Neue', Arial, sans-serif" font-size="56" font-weight="600" letter-spacing="-0.5"><tspan fill="#F0F2F5">Printer</tspan><tspan fill="#E6007E">Service</tspan></text>
+
+  </g>
+</svg>
