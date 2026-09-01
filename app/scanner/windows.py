@@ -21,6 +21,7 @@ S1 plugged AND unplugged):
 """
 
 import logging
+from pathlib import Path
 
 from app.config import ENABLE_SCAN
 from app.models.scanning import ScanDevice
@@ -87,3 +88,117 @@ def scanning_supported() -> bool:
     tests patch it HERE on this module, not on app.config.
     """
     return ENABLE_SCAN and scan_available()
+
+
+# ---------------------------------------------------------------------------
+# The scan half (SCAN_PLAN §5): one flatbed page out — or a readable error.
+#
+# Unlike the detection functions above, these MAY raise: RuntimeError with
+# a phone-user-readable message, exactly like submit_pdf's contract with
+# the print pipeline. The scan pipeline records it as the job's error.
+# ---------------------------------------------------------------------------
+
+# WIA's PNG format ID, passed as a raw GUID (SCAN_PLAN §0: avoid
+# win32com.client.constants — it needs a makepy-generated module).
+WIA_FORMAT_PNG = "{B96B3CAB-0728-11D3-9D7B-0000F81EF32E}"
+
+# WIA error HRESULTs (mapped from the low 32 bits) → what the phone user
+# can actually do. Unmapped codes fall back to the raw error text. Same
+# spirit as the print engine's SumatraPDF exit-code catalog (p15).
+WIA_ERROR_MESSAGES = {
+    0x80210001: "The scanner reported a paper jam. Clear it and try again.",
+    0x80210002: (
+        "No document was detected on the scanner glass. Place the page "
+        "face down and try again."
+    ),
+    0x80210004: (
+        "The scanner is offline — check that the printer is powered on and "
+        "the USB cable is seated."
+    ),
+    0x80210005: "The scanner is busy. Wait for the current job and try again.",
+    0x80210007: (
+        "The scanner needs attention — check that the cover is closed and "
+        "look at the error light."
+    ),
+    0x80210009: (
+        "The scanner stopped responding. Re-seat the USB cable and try again."
+    ),
+    0x8021000C: (
+        "The scanner is locked by another application. Close it and try again."
+    ),
+}
+
+
+def _human_scan_error(exc: Exception) -> str:
+    """Translate a WIA COM error into something a phone user can act on.
+
+    pywin32's com_error buries the HRESULT in args[2][5]; WIA's specific
+    codes live in 0x802100xx.
+    """
+    args = getattr(exc, "args", ())
+    scode = None
+    if len(args) >= 3 and isinstance(args[2], tuple) and len(args[2]) >= 6:
+        scode = args[2][5]
+    if isinstance(scode, int) and scode < 0:
+        mapped = WIA_ERROR_MESSAGES.get(scode & 0xFFFFFFFF)
+        if mapped:
+            return mapped
+    return f"The scan failed: {exc}"
+
+
+def _item_label(item) -> str:
+    """An item's friendly name, trying both WIA property names."""
+    for prop in ("Item Name", "Name"):
+        try:
+            return str(item.Properties(prop).Value)
+        except Exception:
+            continue
+    return ""
+
+
+def _open_flatbed_item():
+    """Connect to the first WIA scanner and return a transferable item.
+
+    Prefers an item whose name mentions "flat" (matters on multi-item
+    devices with a feeder); on the L3210 there is exactly one item and it
+    IS the flatbed (proven by spike S2).
+    """
+    import win32com.client
+
+    manager = win32com.client.Dispatch("WIA.DeviceManager")
+    infos = manager.DeviceInfos
+    for index in range(1, infos.Count + 1):
+        info = infos.Item(index)
+        if info.Type != WIA_SCANNER_TYPE:
+            continue
+        device = info.Connect()
+        items = device.Items
+        order = sorted(
+            range(1, items.Count + 1),
+            key=lambda i: "flat" not in _item_label(items.Item(i)).lower(),
+        )
+        return items.Item(order[0])
+    raise RuntimeError(
+        "The scanner was not found — check the USB connection and try again."
+    )
+
+
+def scan_flatbed(dest: Path) -> Path:
+    """Transfer one flatbed page to a PNG at `dest` (SCAN_PLAN §5 step 3).
+
+    Driver-default resolution and color — the user-facing options (dpi,
+    color_mode, format) arrive in Phase 4. The PNG lands ONLY if the
+    transfer succeeded: WIA's SaveFile refuses to overwrite (spike S4's
+    0x80070050 lesson), so the caller must pass a fresh server-generated
+    name — which every caller here does.
+    """
+    try:
+
+        item = _open_flatbed_item()
+        image = item.Transfer(WIA_FORMAT_PNG)
+        image.SaveFile(str(dest))
+    except RuntimeError:
+        raise  # already human-readable ("scanner was not found", ...)
+    except Exception as exc:
+        raise RuntimeError(_human_scan_error(exc)) from exc
+    return dest

@@ -37,6 +37,10 @@ def _get(name: str, default: str) -> str:
 # Where uploaded PDFs are stored temporarily (SOURCE_OF_TRUTH Section 10)
 UPLOAD_DIR = BASE_DIR / "uploads"
 
+# Where finished scans wait for the phone to download them (SCAN_PLAN §5).
+# Same hygiene model as uploads/: server-generated names, startup sweep.
+DOWNLOAD_DIR = BASE_DIR / "downloads"
+
 # Section 8: cap upload size so a huge/malicious file can't hurt us
 MAX_UPLOAD_MB = int(_get("MAX_UPLOAD_MB", "25"))
 

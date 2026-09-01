@@ -2,9 +2,9 @@
 
 Status: **approved plan, compatibility-reviewed (§0); Phase 0 COMPLETE —
 S1/S2/S3/S4 all PASS on the real L3210 (2026-09-01), including the
-unplugged clean-degradation proof. Phase 1 (detection) LANDED —
-`GET /scanners` live, print code untouched. Next: Phase 2 (scan
-pipeline). Branch `scan-feature`.**
+unplugged clean-degradation proof. Phase 1 (detection) and Phase 2
+(basic scan pipeline: POST /scan + status/download/cancel + downloads/)
+LANDED. Next: Phase 3 (web UI). Branch `scan-feature`.**
 Goal: add an optional **scan** capability (Android → Python service →
 Windows → USB → printer's scanner glass → back to phone) to the existing
 print service, **without ever affecting printing** on a printer that has
@@ -353,6 +353,32 @@ ruff clean. **Print code untouched** — `app/printer/`, `pipeline.py`,
 `POST /scan` (flatbed, default resolution/color only, PDF output),
 job lifecycle + `downloads/`, `/scan/jobs/{id}` + download endpoint.
 
+**Landed (2026-09-01):** `app/scanner/windows.py` grew the scan half —
+`scan_flatbed(dest)` (driver-default resolution/color, PNG transfer; the
+WIA half that raises does so with phone-readable messages: a HRESULT map
+for the common WIA errors — busy/offline/jam/cover — with raw-text
+fallback, same spirit as the print side's exit-code catalog) and
+`_open_flatbed_item()` (flatbed-preferring item selection, spike-proven).
+`app/services/scan_jobs.py`: the separate `scan_jobs` table (same SQLite
+file, own connection + own RLock — jobs.py's connection never touched;
+`create/get/update_status/cancel_job/recover_interrupted`). Lifecycle:
+`queued → scanning → done | failed | cancelled`, cancel checked between
+every pipeline stage, a cancelled scan never marked done.
+`app/services/scan_pipeline.py`: background daemon thread — WIA transfer →
+**real ImageProcessor** (the print side's fit-to-page code, spike-S3
+reuse) → `downloads/<job_id>.pdf`, raw PNG deleted on success / kept on
+failure. `app/services/downloads.py`: `downloads/` hygiene (server-
+generated names, dotfiles survive, startup sweep). `app/api/scan.py`:
+`POST /scan` (201 + job id, PIN-gated, 503 with an actionable message
+when disabled/scanner-less), `GET /scan/jobs/{id}` (carries
+`download_url` when done), `GET /scan/jobs/{id}/download`
+(FileResponse), `DELETE /scan/jobs/{id}` (cancel + cleanup, PIN-gated).
+`main.py`: downloads sweep + scan recovery in the lifespan, one additive
+router mount. Tests: 14 scan-store/downloads unit tests, 9 pipeline tests
+(fakes with in-flight gates: COM-error translation, vanished scanner,
+corrupt-image wrap failure, cancel-mid-transfer discard), 15 API tests.
+Suite: 323 tests, 96.0 % coverage, ruff clean. Print code untouched.
+
 ### Phase 3 — web UI polish
 
 Scan button, status polling, download/view link — reusing the existing
@@ -427,5 +453,5 @@ Same CI gates apply: `ruff check .` + `pytest --cov-fail-under=90`.
 approved. Phase 0's spike is CLOSED: S1 (plugged + unplugged), S2, S3 and
 S4 all PASS on the real L3210 — the scan feature is proven feasible with
 zero new dependencies, and a scanner-less setup is proven safe. Phase 1
-(detection) has landed. Phase 2 (the basic scan pipeline) is the next
-slice to build.*
+(detection) and Phase 2 (basic scan pipeline) have landed. Phase 3 (web
+UI: scan button, polling, download link) is the next slice to build.*

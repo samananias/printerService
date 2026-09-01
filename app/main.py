@@ -33,9 +33,11 @@ from fastapi import FastAPI
 from app.api.jobs import router as jobs_router
 from app.api.print import router as print_router
 from app.api.printers import router as printers_router
+from app.api.scan import router as scan_router
 from app.api.scanners import router as scanners_router
 from app.api.web import router as web_router
-from app.services import jobs
+from app.services import jobs, scan_jobs
+from app.services.downloads import sweep_stale_downloads
 from app.services.logging_setup import setup_logging
 from app.services.uploads import sweep_stale_uploads
 
@@ -56,11 +58,20 @@ async def lifespan(app: FastAPI):
     removed = sweep_stale_uploads()
     if removed:
         print(f"[startup] swept {removed} stale upload(s) from a previous run")
+    swept = sweep_stale_downloads()
+    if swept:
+        print(f"[startup] swept {swept} stale download(s) from a previous run")
     recovered = jobs.recover_interrupted()
     if recovered:
         print(
             f"[startup] marked {recovered} interrupted job(s) as failed "
             "(service restarted mid-print)"
+        )
+    scans = scan_jobs.recover_interrupted()
+    if scans:
+        print(
+            f"[startup] marked {scans} interrupted scan(s) as failed "
+            "(service restarted mid-scan)"
         )
     yield
     # Shutdown: nothing to clean yet.
@@ -96,4 +107,8 @@ app.include_router(jobs_router)
 # discovery. The endpoint never errors — on a scanner-less setup it just
 # reports available=false, and nothing else in the app changes.
 app.include_router(scanners_router)
+
+# Scan pipeline (docs/SCAN_PLAN.md Phase 2): POST /scan + job status /
+# download / cancel. Own store, own namespace — never touches print code.
+app.include_router(scan_router)
 
