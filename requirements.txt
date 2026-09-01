@@ -7,3 +7,11 @@ python-multipart>=0.0.9
 
 # Windows printing API (README Section 4) — Windows only
 pywin32>=306; sys_platform == "win32"
+
+# Image processing (Phase 2, multi-format plan): converts JPG/PNG/WebP into
+# print-ready PDF pages. 10.3+ has the image-parsing security fixes.
+pillow>=10.3
+
+# Text/CSV rendering (Phase 4, multi-format plan): authors PDF pages for
+# TXT (monospace, wrapped) and CSV (bordered grid).
+reportlab>=4.0

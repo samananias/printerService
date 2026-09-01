@@ -91,6 +91,7 @@ class TestSubmitPdfSumatraPath:
     ):
         pdf = tmp_path / "doc.pdf"
         pdf.write_bytes(b"%PDF-")
+        monkeypatch.setattr(windows, "PAPER_SIZE", "")  # hermetic: no print settings
         monkeypatch.setattr(windows, "find_sumatra", lambda: "C:/SumatraPDF.exe")
 
         method, printer = windows.submit_pdf(pdf)
@@ -139,6 +140,56 @@ class TestSubmitPdfSumatraPath:
             windows.submit_pdf(tmp_path / "doc.pdf")
 
 
+    def test_print_options_build_the_settings_flag(
+        self, fake_win32print, tmp_path, monkeypatch, recorded_run
+    ):
+        from app.models.printing import PrintOptions
+
+        monkeypatch.setattr(windows, "PAPER_SIZE", "")
+        monkeypatch.setattr(windows, "find_sumatra", lambda: "C:/SumatraPDF.exe")
+        options = PrintOptions(
+            copies=2, pages="2-6", paper="a4", color_mode="monochrome"
+        )
+
+        windows.submit_pdf(tmp_path / "doc.pdf", options=options)
+
+        assert recorded_run["cmd"][3:5] == [
+            "-print-settings",
+            "paper=A4,fit,2x,collate,2-6,monochrome",
+        ]
+        assert recorded_run["cmd"][5:] == ["-silent", str(tmp_path / "doc.pdf")]
+
+
+class TestPrintSettings:
+    """PAPER_SIZE is opt-in (docs/MULTI_FORMAT_PLAN.md §13 assumption #3):
+    empty = no print-settings flag at all, the driver chooses the paper —
+    the exact command spike T4 proved on real paper."""
+
+    def test_set_paper_size_adds_the_print_settings_flag(
+        self, fake_win32print, tmp_path, monkeypatch, recorded_run
+    ):
+        pdf = tmp_path / "doc.pdf"
+        pdf.write_bytes(b"%PDF-")
+        monkeypatch.setattr(windows, "PAPER_SIZE", "A4")
+        monkeypatch.setattr(windows, "find_sumatra", lambda: "C:/SumatraPDF.exe")
+
+        windows.submit_pdf(pdf)
+
+        cmd = recorded_run["cmd"]
+        assert cmd[3:5] == ["-print-settings", "paper=A4,fit"]
+        assert cmd[5:] == ["-silent", str(pdf)]  # file still last, -silent still present
+
+    def test_empty_paper_size_sends_no_print_settings(
+        self, fake_win32print, tmp_path, monkeypatch, recorded_run
+    ):
+        monkeypatch.setattr(windows, "PAPER_SIZE", "")
+        monkeypatch.setattr(windows, "find_sumatra", lambda: "C:/SumatraPDF.exe")
+
+        windows.submit_pdf(tmp_path / "doc.pdf")
+
+        assert "-print-settings" not in recorded_run["cmd"]
+
+
 # ---------------------------------------------------------------------------
 # submit_pdf — the print-verb fallback (only when SumatraPDF is absent)
 # ---------------------------------------------------------------------------
@@ -175,6 +226,144 @@ class TestSubmitPdfFallback:
 # ---------------------------------------------------------------------------
 # win32print presence — the fail-fast contract
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# cancel_spooler_jobs — the p14 printing-stage cancel (best-effort purge)
+# ---------------------------------------------------------------------------
+
+
+class TestCancelSpoolerJobs:
+    def test_purges_only_jobs_whose_document_matches_the_job_id(
+        self, fake_win32print
+    ):
+        # SumatraPDF names spooler documents after the file it prints —
+        # <job_id>.pdf — so a prefix match finds OUR jobs (including
+        # multi-digit id prefixes like abc123-old) without tracking
+        # Windows job ids.
+        fake_win32print._spooler_jobs = [
+            {"JobId": 7, "pDocument": "abc123.pdf"},
+            {"JobId": 8, "pDocument": "other.pdf"},
+            {"JobId": 9, "pDocument": "abc123-old.pdf"},
+        ]
+
+        removed = windows.cancel_spooler_jobs(TEST_PRINTER, "abc123")
+
+        assert removed == 2
+        assert [call[1] for call in fake_win32print.setjob_calls] == [7, 9]
+        assert all(
+            call[2] == fake_win32print.JOB_CONTROL_DELETE
+            for call in fake_win32print.setjob_calls
+        )
+
+    def test_empty_queue_removes_nothing(self, fake_win32print):
+        assert windows.cancel_spooler_jobs(TEST_PRINTER, "abc123") == 0
+        assert fake_win32print.setjob_calls == []
+
+    def test_entries_without_a_document_name_are_tolerated(self, fake_win32print):
+        fake_win32print._spooler_jobs = [{"JobId": 5}]  # malformed entry
+
+        assert windows.cancel_spooler_jobs(TEST_PRINTER, "abc123") == 0
+
+
+# ---------------------------------------------------------------------------
+# printer_ready — the p15 pre-dispatch readiness check
+# ---------------------------------------------------------------------------
+
+
+class TestPrinterReady:
+    def test_healthy_printer_is_ready(self, fake_win32print):
+        fake_win32print.GetPrinter = lambda handle, level: {
+            "Status": 0,
+            "Attributes": 0,
+        }
+        assert windows.printer_ready(TEST_PRINTER) == (True, "")
+
+    def test_offline_status_is_not_ready(self, fake_win32print):
+        fake_win32print.GetPrinter = lambda handle, level: {
+            "Status": 0x00000080,  # PRINTER_STATUS_OFFLINE
+            "Attributes": 0,
+        }
+        ready, reason = windows.printer_ready(TEST_PRINTER)
+        assert ready is False
+        assert "offline" in reason
+
+    def test_windows_work_offline_attribute_is_not_ready(self, fake_win32print):
+        # What Windows sets when a USB printer is powered off — the most
+        # common real-world "why did nothing print" state.
+        fake_win32print.GetPrinter = lambda handle, level: {
+            "Status": 0,
+            "Attributes": 0x00000400,  # PRINTER_ATTRIBUTE_WORK_OFFLINE
+        }
+        ready, reason = windows.printer_ready(TEST_PRINTER)
+        assert ready is False
+        assert "offline" in reason
+
+    def test_out_of_paper_is_reported(self, fake_win32print):
+        fake_win32print.GetPrinter = lambda handle, level: {
+            "Status": 0x00000010,  # PRINTER_STATUS_PAPER_OUT
+            "Attributes": 0,
+        }
+        ready, reason = windows.printer_ready(TEST_PRINTER)
+        assert ready is False
+        assert "out of paper" in reason
+
+    def test_query_failure_never_blocks_printing(self, fake_win32print):
+        # Best-effort by design: a spooler query hiccup must not stop a
+        # job that might have printed fine.
+        def broken(handle, level):
+            raise RuntimeError("spooler grumbled")
+
+        fake_win32print.GetPrinter = broken
+        assert windows.printer_ready(TEST_PRINTER) == (True, "")
+
+    def test_not_ready_printer_refuses_dispatch_before_sumatra(
+        self, fake_win32print, tmp_path, monkeypatch, recorded_run
+    ):
+        fake_win32print.GetPrinter = lambda handle, level: {
+            "Status": 0x00000080,
+            "Attributes": 0,
+        }
+        monkeypatch.setattr(windows, "find_sumatra", lambda: "C:/SumatraPDF.exe")
+
+        with pytest.raises(RuntimeError, match="offline"):
+            windows.submit_pdf(tmp_path / "doc.pdf")
+
+        assert "cmd" not in recorded_run  # Sumatra never even started
+
+
+class TestSumatraExitCatalog:
+    def test_documented_exit_codes_map_to_human_messages(
+        self, fake_win32print, tmp_path, monkeypatch
+    ):
+        cases = {
+            2: "corrupt or password-protected",
+            4: "printer was not found",
+            5: "paper, ink and USB",
+        }
+        for code, expected in cases.items():
+            def failing_run(cmd, **kwargs):
+                return subprocess.CompletedProcess(cmd, returncode=code, stdout=b"", stderr=b"")
+
+            monkeypatch.setattr(windows.subprocess, "run", failing_run)
+            monkeypatch.setattr(windows, "find_sumatra", lambda: "C:/SumatraPDF.exe")
+
+            with pytest.raises(RuntimeError, match=expected):
+                windows.submit_pdf(tmp_path / "doc.pdf")
+
+    def test_unknown_exit_code_still_includes_stderr(
+        self, fake_win32print, tmp_path, monkeypatch
+    ):
+        def failing_run(cmd, **kwargs):
+            return subprocess.CompletedProcess(
+                cmd, returncode=99, stdout=b"", stderr=b"driver grumbled\n"
+            )
+
+        monkeypatch.setattr(windows.subprocess, "run", failing_run)
+        monkeypatch.setattr(windows, "find_sumatra", lambda: "C:/SumatraPDF.exe")
+
+        with pytest.raises(RuntimeError, match="driver grumbled"):
+            windows.submit_pdf(tmp_path / "doc.pdf")
 
 
 class TestPywin32Presence:

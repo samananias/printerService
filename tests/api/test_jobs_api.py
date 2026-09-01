@@ -69,6 +69,23 @@ class TestCancelJob:
     def test_cancelling_unknown_job_404(self, client):
         assert client.delete("/jobs/ghost").status_code == 404
 
+    def test_cancelling_while_printing_purges_the_spooler(
+        self, client, tmp_upload_dir, fake_win32print
+    ):
+        # p14: a printing-stage cancel is best-effort — our queued spooler
+        # jobs are purged, the job is marked cancelled either way.
+        seed_job(tmp_upload_dir, "abc123")
+        jobs.update_status("abc123", JobStatus.PRINTING)
+        fake_win32print._spooler_jobs = [{"JobId": 42, "pDocument": "abc123.pdf"}]
+
+        response = client.delete("/jobs/abc123")
+
+        assert response.status_code == 200
+        assert response.json()["status"] == JobStatus.CANCELLED
+        assert fake_win32print.setjob_calls == [
+            ("handle:EPSON L3210 Series", 42, fake_win32print.JOB_CONTROL_DELETE)
+        ]
+
     def test_pin_enforced_on_cancel_when_configured(self, client, tmp_upload_dir, monkeypatch):
         monkeypatch.setattr("app.services.auth.API_PIN", "1234")
         seed_job(tmp_upload_dir, "abc123")
@@ -76,6 +93,77 @@ class TestCancelJob:
         no_header = client.delete("/jobs/abc123")
         wrong_pin = client.delete("/jobs/abc123", headers={"X-API-PIN": "0000"})
         correct = client.delete("/jobs/abc123", headers={"X-API-PIN": "1234"})
+
+        assert no_header.status_code == 401
+        assert wrong_pin.status_code == 401
+        assert correct.status_code == 200
+
+
+class TestRetryJob:
+    def test_requeues_a_failed_job_from_its_stored_upload(
+        self, client, tmp_upload_dir, mock_print, wait_for_status
+    ):
+        seed_job(tmp_upload_dir, "abc123")
+        jobs.update_status("abc123", JobStatus.FAILED, error="printer offline")
+
+        response = client.post("/jobs/abc123/retry")
+
+        assert response.status_code == 200
+        assert response.json()["status"] == JobStatus.QUEUED
+
+        job = wait_for_status("abc123", JobStatus.DONE)
+        assert job.error is None  # the retry started clean and succeeded
+
+    def test_retry_reuses_the_original_print_options(
+        self, client, tmp_upload_dir, mock_print, wait_for_status
+    ):
+        src = tmp_upload_dir / "abc123.pdf"
+        src.write_bytes(b"%PDF-1.4 x")
+        options = {
+            "copies": 2,
+            "pages": "",
+            "paper": "a4",
+            "color_mode": "monochrome",
+        }
+        jobs.create_job("abc123", "file.pdf", 9, src, format="pdf", options=options)
+        jobs.update_status("abc123", JobStatus.FAILED, error="printer offline")
+
+        response = client.post("/jobs/abc123/retry")
+
+        assert response.status_code == 200
+        wait_for_status("abc123", JobStatus.DONE)
+        assert mock_print.options == options  # the retry prints like the original
+
+    def test_retry_unknown_job_404(self, client):
+        assert client.post("/jobs/ghost/retry").status_code == 404
+
+    def test_retry_refused_for_non_failed_jobs(self, client, tmp_upload_dir):
+        seed_job(tmp_upload_dir, "abc123")  # still just 'received'
+
+        response = client.post("/jobs/abc123/retry")
+
+        assert response.status_code == 409
+        assert "only failed jobs" in response.json()["detail"]
+
+    def test_retry_refused_when_the_upload_is_gone(self, client, tmp_upload_dir):
+        seed_job(tmp_upload_dir, "abc123", pdf=False)  # no file on disk
+        jobs.update_status("abc123", JobStatus.FAILED, error="printer offline")
+
+        response = client.post("/jobs/abc123/retry")
+
+        assert response.status_code == 409
+        assert "gone" in response.json()["detail"]
+
+    def test_pin_enforced_on_retry_when_configured(
+        self, client, tmp_upload_dir, monkeypatch, mock_print
+    ):
+        monkeypatch.setattr("app.services.auth.API_PIN", "1234")
+        seed_job(tmp_upload_dir, "abc123")
+        jobs.update_status("abc123", JobStatus.FAILED, error="x")
+
+        no_header = client.post("/jobs/abc123/retry")
+        wrong_pin = client.post("/jobs/abc123/retry", headers={"X-API-PIN": "0000"})
+        correct = client.post("/jobs/abc123/retry", headers={"X-API-PIN": "1234"})
 
         assert no_header.status_code == 401
         assert wrong_pin.status_code == 401

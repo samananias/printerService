@@ -34,6 +34,7 @@ from app.api.jobs import router as jobs_router
 from app.api.print import router as print_router
 from app.api.printers import router as printers_router
 from app.api.web import router as web_router
+from app.services import jobs
 from app.services.logging_setup import setup_logging
 from app.services.uploads import sweep_stale_uploads
 
@@ -44,14 +45,22 @@ async def lifespan(app: FastAPI):
 
     Startup: configure logging, then sweep uploads/ of files left behind by
     a previous run — the temp-file hygiene SOURCE_OF_TRUTH Section 8 asks
-    for. (Phase 5 also deletes each file right after it's printed; the sweep
-    is the safety net for crashes.)
+    for. (Each finished job also deletes its own files right after
+    printing; the sweep is the safety net for crashes.) Then mark jobs left
+    in active states by that previous run as failed — their uploads are
+    gone, so they can't be retried (p14 startup recovery).
     """
     setup_logging()
 
     removed = sweep_stale_uploads()
     if removed:
         print(f"[startup] swept {removed} stale upload(s) from a previous run")
+    recovered = jobs.recover_interrupted()
+    if recovered:
+        print(
+            f"[startup] marked {recovered} interrupted job(s) as failed "
+            "(service restarted mid-print)"
+        )
     yield
     # Shutdown: nothing to clean yet.
 

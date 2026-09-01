@@ -1,7 +1,7 @@
 # Printer Service — Source of Truth
 
 **Project:** Android → Network → Python Service → USB → Epson L3210
-**Status:** ✅ MVP working end-to-end (spike T4 PASS: real page printed via SumatraPDF; phone → service → paper verified). ✅ Automated test suite (90 tests, 95%+ coverage gate) + ruff lint + GitHub Actions CI — service *logic* is verified on every push; hardware is verified by the spike on the real PC. Living document. Update this file whenever a decision changes.
+**Status:** 🟢 **Multi-format MVP VERIFIED on real hardware** (2026-08-29): p10–p13 code + spikes **T4/T5/T6/T7 all PASS** on the Epson L3210 — PDF, images, office, TXT/CSV all print end-to-end. 193 automated tests, ≈97 % coverage, ruff clean. Branch pushed; PR #1 open; CI running. Living document. Update this file whenever a decision changes.
 **Audience:** Beginner learning networking, servers, and Python.
 **Quickstart & pre-setup checklist:** see the root [README.md](../README.md).
 
@@ -196,6 +196,15 @@ None of these should be assumed to work out of the box on your specific old PC w
 
 🔵 **Decision:** **SumatraPDF** (`SumatraPDF.exe -print-to "<printer>" -silent <file.pdf>`) is the primary PDF printing method; the print verb remains a code fallback (default printer only); PDF→image conversion is the unimplemented last resort. Implemented in `app/printer/windows.py`; submission runs in a background thread (`app/services/pipeline.py`) so `POST /print` returns `"queued"` immediately and job status moves `queued → done/failed`. **Status: confirmed working end-to-end via the spike (real page printed).** Re-confirm on the old PC at deploy time.
 
+🟢 **Multi-format extension of the same decision (p10–p13):** every format is normalized to PDF *before* the print engine — format processors (images via Pillow, office via LibreOffice Headless, text/CSV via reportlab) feed the unchanged `submit_pdf()`, so SumatraPDF remains the only component that ever talks to the printer. The office converter is gated by `ENABLE_OFFICE` plus LibreOffice presence (the kill switch). Full decision record: [MULTI_FORMAT_PLAN.md](MULTI_FORMAT_PLAN.md).
+
+🟢 **SPIKE RESULTS for the new formats (run on the print-server PC, 2026-08-29):**
+- **T5 PASS** (`spike_t5_images.py --paper A4`) — 4 test images (JPEG gradient, PNG with transparency, WebP, EXIF-rotated JPEG) converted by the real ImageProcessor in 0.19–0.35 s each and printed via SumatraPDF to `EPSON L3210 Series`. Paper judged good: all pages upright, nothing clipped, transparency corners white (not black), EXIF image upright. The extra `-print-settings "paper=A4,fit"` page also came out A4 → **the driver honors the flag**, so `PAPER_SIZE` may now be set in `.env` if wanted (still optional; empty = driver chooses).
+- **T7 PASS** (`spike_t7_text.py`) — TXT (wrap + pagination) and a 40×6 CSV with quoted cells rendered by the real TextProcessor and printed. Paper judged good: margins clean, nothing clipped, grid/borders drawn.
+- **T6 PASS** (`spike_t6_office.py`, 2026-08-29) — LibreOffice 26.8.0 installed on the print-server PC (Windows 11 — no 7.6.x pin needed; installed via the CLI curl recipe now in README §1 after winget stalled). Table-heavy DOCX (20.8 s), print-area XLSX in landscape (10.5 s) and 16:9 PPTX (10.9 s) converted by the real OfficeProcessor and printed — well under the 120 s `CONVERT_TIMEOUT_S`. Paper judged good: table fits with borders, **only the print area printed** (the "OUTSIDE" cell stayed out), slides landscape.
+
+🟢 **With T4/T5/T6/T7 all PASS, the multi-format MVP is fully verified on real hardware — every supported format prints end-to-end.**
+
 ---
 
 ## 6. Android Side
@@ -309,6 +318,51 @@ This is a home-lab project, so the goal is **sensible defaults**, not enterprise
 - Basic queue management if multiple jobs arrive close together.
 - Logging, and automatic cleanup of temp files.
 
+### Multi-Format Printing (current stage — p10 onward)
+The service grows from PDF-only to a general multi-format print service
+(images, office documents, text/CSV) with PDF as the one internal print
+format and SumatraPDF kept as the print engine. The full investigation,
+decision record, phased roadmap and spike protocol (T5–T7) live in
+[MULTI_FORMAT_PLAN.md](MULTI_FORMAT_PLAN.md); its hardware spikes extend
+Section 5's T1–T4 convention before any new format prints real paper.
+
+**Status — stage CLOSED (2026-08-29): 🟢 code complete through Phase 4 AND all paper gates passed (T5/T6/T7). The multi-format MVP is verified.**
+
+- 🟢 **Done** (commits on `multiple-types-compatibility`, pushed; PR #1
+  open, CI running):
+  - `56afce6 docs:` decision record + roadmap (MULTI_FORMAT_PLAN.md).
+  - `d078d41 p10:` detection (magic bytes per format, extension
+    allowlist, macro rejection) + processor registry + generalized
+    uploads + conversion lock; `converting`/`printing` states now set.
+  - `b928e11 p11:` images via Pillow (EXIF, alpha→white, fit/center,
+    300-DPI cap, 10-page frame cap); `-print-settings` wired but
+    `PAPER_SIZE` defaults to empty = the T4-proven driver behavior.
+  - `19a7223 p12:` office via LibreOffice headless (fresh profile per
+    conversion, timeout + process-tree kill, `ENABLE_OFFICE` kill
+    switch; `available()` gate separates "later phase" from
+    "unavailable on this server").
+  - `0be3eab p13:` text/CSV via reportlab (TXT wrap/paginate, CSV grid
+    with repeated header + truncation notices, verified decoding).
+    All four MVP categories registered.
+  - Suite: 193 tests, ≈97 % coverage (gate 90 %), ruff clean. Web page
+    and API accept every MVP extension. Office uploads currently return
+    the kill-switch 415 because LibreOffice is not installed — designed
+    behavior, not a bug.
+- ✅ **Since the morning of 2026-08-29:** branch pushed (PR #1 open, CI
+  running); **T5 PASS, T7 PASS, then LibreOffice 26.8.0 installed (CLI
+  curl recipe) and T6 PASS** — all recorded in Section 5.
+- ✅ **Remaining follow-ups (non-blocking):**
+  1. Merge PR #1 into `main` when CI is green.
+  2. `PAPER_SIZE` may now be set in `.env` (e.g. `A4`) — T5 verified the
+     driver honors `-print-settings`; still optional (empty = driver
+     chooses).
+  3. One real print of each format from the phone as a final smile-check
+     now that LibreOffice is installed.
+- ⚪ **Next stage:** Phase 5 (queue management: cancel-while-converting,
+  spooler purge via `win32print.SetJob`, retry, SQLite persistence +
+  startup recovery), then Phase 6 (reliability), Phase 7/v2 (print
+  options UI). Designed in MULTI_FORMAT_PLAN.md §10, not yet built.
+
 ---
 
 ## 10. Project Folder Structure 🔵
@@ -345,12 +399,13 @@ Keep it this flat at first — you can split `api/`, `printer/`, etc. further on
 |---|---|---|---|---|
 | `/health` | GET | none | `{"status": "ok"}` | Lets you (or the phone) quickly confirm the server is reachable and running, independent of printing logic — the first thing to check when something's wrong. |
 | `/printers` | GET | none | List of available printer names (from `pywin32`) | Confirms Windows/the driver can see the L3210 at all, and leaves room for multiple printers later. |
-| `/print` | POST | A file upload (PDF) + optional printer name | `{"job_id": "...", "status": "queued"}` | The core action: accept a file and start a print job. |
+| `/print` | POST | A file upload (any supported format) + **optional print options**: `copies` (1–99), `pages` (`2-6`, `1,3,5`, `odd`/`even` — strict allowlist), `paper` (a4/letter/legal/a3/a5/long-bond), `color_mode` (color/monochrome) — Phase 7 | `{"job_id": "...", "status": "queued"}` | The core action: accept a file and start a print job. Options apply to every format because everything is normalized to PDF before the engine runs; they're stored on the job so a retry reprints identically. |
 | `/jobs` | GET | none | List of recent jobs and their statuses | Lets the phone (or you) see what's happened/is happening, without re-printing. |
 | `/jobs/{id}` | GET | job id in URL | Status of one specific job | Lets the UI poll "is my print done yet?" |
 | `/jobs/{id}` | DELETE | job id in URL | Confirmation / error | Lets you cancel a queued job — useful once you've accidentally queued the wrong file (you will). |
+| `/jobs/{id}/retry` | POST | job id in URL | The job re-queued | Re-print a failed job from its stored upload (p14) — no re-upload needed. |
 
-Nothing here is over-engineered: every endpoint maps directly to something you'll actually need while testing the system by hand in Phase 3–6.
+Nothing here is over-engineered: every endpoint maps directly to something you'll actually need while testing the system by hand.
 
 ---
 
@@ -358,11 +413,9 @@ Nothing here is over-engineered: every endpoint maps directly to something you'l
 
 **Do you need one for v1? No.**
 
-For a single-server, single-user, home-lab MVP, an **in-memory Python dictionary** (job ID → job info) is enough: it's simple, requires no setup, and is easy to reason about while you're still learning. Its one real downside — job history disappears if the service restarts — is not a problem worth solving yet.
+🟢 **As of p14 the store is SQLite** (`logs/jobs.sqlite3` by default, `JOB_DB_PATH` in `.env`) — the upgrade path below was taken once multi-format office jobs (tens of seconds each) made losing a queued job to a restart expensive, and "retry failed" needed the uploaded file's location to outlive the request. The function surface (`create_job`, `get_job`, `list_jobs`, `update_status`, `cancel_job`) is unchanged, so nothing outside `app/services/jobs.py` moved. Startup recovery marks jobs left in active states by a crashed run as failed — their uploads are already swept, so they can't be retried.
 
-- **In-memory storage** 🔵 recommended for v1 — zero setup, perfect for learning, data doesn't survive a restart (acceptable for now).
-- **JSON file** 🟡 alternative — barely more effort than in-memory, and survives restarts; reasonable "Phase 6" upgrade if you want job history to persist.
-- **SQLite** ⚪ future improvement — worth learning once you actually feel the pain of losing history, or if you want to practice real database concepts (queries, schemas) as a deliberate next-step exercise, not before.
+The progression was: **in-memory dict** (v1 — zero setup, ideal while learning) → **SQLite** (p14 — one file, no server). A JSON file was considered as the intermediate step but SQLite came at the same effort. Anything heavier (Postgres, a DB server) would only make sense with many machines or users — explicitly out of scope (§16).
 
 ---
 
@@ -390,17 +443,18 @@ The table above is the *hardware/network* test plan. On top of it sits an automa
 
 | What the suite verifies | How |
 |---|---|
-| Upload validation: extension, `%PDF-` magic bytes, size limit — including the exact boundary (`>` vs `>=`) | Unit tests with parametrized inputs (table row #8, automated) |
-| Job lifecycle `received → queued → done/failed/cancelled`, error/printer recording, cancellation rules | Unit tests against the in-memory store (row #6's locking, via a concurrency smoke test) |
-| Print submission *decisions*: SumatraPDF command line, printer-name override, print-verb fallback and its "default printer only" refusal, loud failure without pywin32 | Unit tests with a **fake `win32print` module** injected into `sys.modules` and mocked `subprocess`/`os.startfile` |
-| Whole-API behavior: `/health`, `/`, `/print` (201/401/413/415/500), `/jobs` CRUD, `/printers` (200/503/500) | API tests through FastAPI's `TestClient` — no network needed (rows #2/#3's logic) |
-| Pipeline threading: `queued` visible while the thread runs, temp file deleted after `done`, kept after `failed` | Unit tests waiting on fakes with bounded polling (deterministic, no `sleep`) |
+| Format detection & the upload gate: magic bytes per format (PDF, JPEG/PNG/WebP, ZIP containers sniffed for OOXML/ODF parts, OLE), extension allowlist (a lying `.exe` is refused even when it contains a PDF), macro-format policy rejection, the two availability gates (unregistered = "later phase", office kill switch = actionable message), size limit | Unit tests with parametrized inputs (table row #8, generalized to every format) |
+| Format processors: images (EXIF orientation, alpha→white, fit/center geometry, 300-DPI cap, frame cap — real Pillow), office (headless invocation shape, fresh profile per conversion, timeout → process-tree kill, nonzero-exit / no-output mapping, kill switch — LibreOffice faked at `subprocess.Popen`), text/CSV (word-wrap, decode chain, grid widths, truncation notices — real reportlab) | Unit tests; produced PDFs are asserted at byte level (`%PDF-` magic, page-object counts, drawn text is visible because page compression is off) |
+| Job lifecycle `received → queued → converting → printing → done/failed/cancelled`, error/printer recording, cancellation rules | Unit tests against the in-memory store (row #6's locking, via a concurrency smoke test) |
+| Print submission *decisions*: SumatraPDF command line (incl. optional `-print-settings` when `PAPER_SIZE` is set), printer-name override, print-verb fallback and its "default printer only" refusal, loud failure without pywin32 | Unit tests with a **fake `win32print` module** injected into `sys.modules` and mocked `subprocess`/`os.startfile` |
+| Whole-API behavior: `/health`, `/`, `/print` (201/401/413/415/500) for every category, `/jobs` CRUD, `/printers` (200/503/500) | API tests through FastAPI's `TestClient` — no network needed (rows #2/#3's logic) |
+| Pipeline threading: `converting`/`printing` visible while the thread runs, temp files deleted after `done`, kept after `failed`, conversions serialized one-at-a-time by the conversion lock (the ≤4 GB guard) | Unit tests waiting on fakes with bounded polling (deterministic, no `sleep`) |
 
-**Key design rule:** tests never touch machine state — no real printer, no real SumatraPDF, no real `.env`, real `uploads/` redirected to a temp dir. That's what lets the same suite pass on a Windows dev box and the Ubuntu CI runner. It's possible at all because `win32print` is imported lazily *inside* `app/printer/windows.py`'s functions — a v1 design choice (Section 4) that turned out to make CI possible for free.
+**Key design rule:** tests never touch machine state — no real printer, no real SumatraPDF, no real LibreOffice, no real `.env`, real `uploads/` redirected to a temp dir. That's what lets the same suite pass on a Windows dev box and the Ubuntu CI runner. It's possible at all because `win32print` is imported lazily *inside* `app/printer/windows.py`'s functions — a v1 design choice (Section 4) that turned out to make CI possible for free. Pillow and reportlab, being Python libraries, run *inside* the tests; LibreOffice, being an external executable, is only ever faked.
 
-**What stays manual:** anything physical or environmental — rows #1, #5, #7, #9, #10, #11, and the "did paper come out" half of #4/#5. `spike_print_test.py` on the actual print-server PC remains the hardware truth (Section 5).
+**What stays manual:** anything physical or environmental — rows #1, #5, #7, #9, #10, #11, the "did paper come out" half of #4/#5, and the multi-format spikes T5/T6/T7 (Section 5). `spike_print_test.py` plus the three new spike scripts on the actual print-server PC remain the hardware truth.
 
-**Quality gates in CI (`.github/workflows/ci.yml`, Ubuntu + Python 3.12):** `ruff check .` (lint only — no formatter enforcement, so working code never gets reformatted wholesale) then `pytest` with `--cov-fail-under=90` (configured in `pyproject.toml`; measured coverage ≈95%, the gap is mostly `logging_setup.py`, which tests deliberately don't execute to keep global logging state pristine). The same two commands run locally from the project root after `pip install -r requirements-dev.txt`.
+**Quality gates in CI (`.github/workflows/ci.yml`, Ubuntu + Python 3.12):** `ruff check .` (lint only — no formatter enforcement, so working code never gets reformatted wholesale) then `pytest` with `--cov-fail-under=90` (configured in `pyproject.toml`; measured coverage ≈97 % across 193 tests — the gap is mostly `logging_setup.py`, which tests deliberately don't execute to keep global logging state pristine). The same two commands run locally from the project root after `pip install -r requirements-dev.txt`.
 
 ---
 
@@ -508,8 +562,8 @@ This MVP deliberately has **no database, no authentication beyond "same Wi-Fi ne
 
 ## Open Items Requiring Testing (Summary)
 
-- 🟢 **Resolved (spike run):** the spooler path works and the printer is detected; the Windows "print" verb has no PDF handler on the tested machine, so **SumatraPDF is the chosen PDF method** (Section 5 now records the decision). Still to confirm: T4 PASS after installing SumatraPDF, then a real end-to-end print — on this machine and again on the old PC at deploy time.
-- 🔴 Confirm `pywin32` correctly detects and can submit jobs to the specific Epson L3210 driver installed on your PC (Section 4, Section 9 Phase 4). *(Spike T1/T2 confirm detection and spooler acceptance.)*
+- 🟢 **Resolved (spikes run):** the spooler path works, the printer is detected, and the Windows "print" verb has no PDF handler on the tested machine — so **SumatraPDF is the chosen print engine** (Section 5 records the decision and the T4 PASS with real paper). Still worth re-confirming the whole chain on the old PC at deploy time.
+- 🟢 **Multi-format hardware gates — ALL PASS (2026-08-29):** T5 (images), T6 (office, LibreOffice 26.8.0), T7 (TXT/CSV) — details in Section 5. The multi-format MVP is verified end-to-end. Follow-ups: merge PR #1, optionally set `PAPER_SIZE=A4` in `.env`, phone smile-check per format.
 - 🔴 If you later pursue Option C (Android's native `PrintService` framework, Section 6), treat IPP support and the `PrintService` implementation itself as a separate research phase — do not assume it's a small extension of the MVP.
 
 ---

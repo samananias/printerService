@@ -3,7 +3,9 @@ GET / — the mobile web page (Phase 6, SOURCE_OF_TRUTH Section 6 "Option B").
 
 The page is a single self-contained HTML string (inline CSS + vanilla JS —
 no build tools, no frameworks) served directly by FastAPI. The phone's
-browser IS the app: open http://<server-ip>:8000, pick a PDF, tap Print.
+browser IS the app: open http://<server-ip>:8000, pick a PDF or image, tap
+Print. The accept list mirrors the categories registered in
+app/processors — new formats update both.
 
 How the upload works (worth reading slowly — this is HTTP from the browser's
 point of view):
@@ -18,15 +20,44 @@ point of view):
 """
 
 from fastapi import APIRouter
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 
 router = APIRouter()
+
+FAVICON_SVG = """<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 512 512" width="512" height="512"
+     role="img" aria-labelledby="ps-title ps-desc">
+  <title id="ps-title">PrinterService</title>
+  <desc id="ps-desc">A smartphone feeding into a printer printing a Wi-Fi page.</desc>
+  <g id="printerservice-mark" transform="translate(256 256) scale(1.15) translate(-256 -256)">
+    <rect id="body" x="112" y="197" width="288" height="174" rx="30" fill="#24272E"/>
+    <rect id="page" x="194" y="325" width="124" height="120" rx="10" fill="#FFD84D"
+          stroke="#1A1C20" stroke-width="9"/>
+    <rect id="output-slot" x="188" y="319" width="136" height="14" rx="7" fill="#FFFFFF"/>
+    <g id="wifi" fill="none" stroke="#00AEEF" stroke-width="8" stroke-linecap="round">
+      <path d="M 228.4 399.4 A 39 39 0 0 1 283.6 399.4"/>
+      <path d="M 236.9 407.9 A 27 27 0 0 1 275.1 407.9"/>
+      <path d="M 245.4 416.4 A 15 15 0 0 1 266.6 416.4"/>
+    </g>
+    <circle id="wifi-dot" cx="256" cy="427" r="6.5" fill="#00AEEF"/>
+    <rect id="input-slot" x="184" y="207" width="144" height="22" rx="11" fill="#FFFFFF"/>
+    <g id="phone">
+      <rect x="204" y="67" width="104" height="160" rx="26" fill="#E6007E"/>
+      <rect x="216" y="81" width="80" height="112" rx="13" fill="#FFFFFF"/>
+      <rect x="236" y="207" width="40" height="6" rx="3" fill="#FFFFFF"/>
+    </g>
+    <rect id="input-slot-lip" x="184" y="221" width="144" height="8" fill="#24272E"/>
+    <circle id="led" cx="350" cy="267" r="9" fill="#00AEEF"/>
+  </g>
+</svg>"""
 
 PAGE = """<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="alternate icon" type="image/svg+xml" href="/favicon.ico">
 <title>Printer Service</title>
 <style>
   body   { font-family: system-ui, sans-serif; background: #f0f4f8;
@@ -35,7 +66,9 @@ PAGE = """<!DOCTYPE html>
   .card  { background: #fff; border-radius: 12px; padding: 24px;
            margin: 16px; max-width: 380px; width: 100%;
            box-shadow: 0 2px 10px rgba(0,0,0,.12); }
-  h1     { font-size: 1.3rem; margin: 0 0 4px; }
+  .header{ display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+  .header img { width: 32px; height: 32px; }
+  h1     { font-size: 1.3rem; margin: 0; }
   p.sub  { color: #667; margin: 0 0 18px; font-size: .9rem; }
   input[type=file] { width: 100%; margin-bottom: 14px; }
   input[type=password] { width: 100%; margin-bottom: 14px; padding: 8px;
@@ -48,35 +81,117 @@ PAGE = """<!DOCTYPE html>
            word-break: break-word; }
   .ok    { color: #166534; }
   .err   { color: #b91c1c; }
+  .opt   { display: block; text-align: left; font-size: .85rem;
+           color: #445; margin-bottom: 10px; }
+  .opt input, .opt select { width: 100%; margin-top: 4px; padding: 8px;
+           box-sizing: border-box; border: 1px solid #ccd;
+           border-radius: 6px; background: #fff; }
 </style>
 </head>
 <body>
 <div class="card">
-  <h1>🖨️ Printer Service</h1>
-  <p class="sub">Pick a PDF and send it to the printer.</p>
+  <div class="header">
+    <img src="/favicon.svg" alt="PrinterService Logo">
+    <h1>Printer Service</h1>
+  </div>
+  <p class="sub">Pick a PDF, image, Office, or text file and send it to the printer.</p>
 
-  <input type="file" id="file" accept=".pdf,application/pdf">
+  <input type="file" id="file"
+         accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp,.txt,.csv">
   <input type="password" id="pin" placeholder="PIN (only if the server set one)">
   <button id="printBtn" onclick="sendPrint()">Print</button>
   <div id="result"></div>
+  <button id="retryBtn" onclick="retryJob()"
+          style="display:none; margin-top:10px; background:#16a34a;">
+    🔁 Retry failed job
+  </button>
+
+  <details style="margin-top:14px;">
+    <summary style="cursor:pointer; font-size:.85rem; color:#667;">
+      Print options
+    </summary>
+    <label class="opt">Copies
+      <input type="number" id="copies" min="1" max="99" value="1">
+    </label>
+    <label class="opt">Pages
+      <input type="text" id="pages" placeholder="all — or 1-3,5 or odd/even">
+    </label>
+    <label class="opt">Paper
+      <select id="paper">
+        <option value="">Printer default</option>
+        <option value="a4">A4</option>
+        <option value="letter">Letter (short bond)</option>
+        <option value="long-bond">Long bond (8.5×13)</option>
+        <option value="legal">Legal</option>
+        <option value="a3">A3</option>
+        <option value="a5">A5</option>
+      </select>
+    </label>
+    <label class="opt">Color
+      <select id="colorMode">
+        <option value="color">Color</option>
+        <option value="monochrome">Black &amp; white</option>
+      </select>
+    </label>
+  </details>
 </div>
 
 <script>
 const btn = document.getElementById("printBtn");
 const resultDiv = document.getElementById("result");
+const retryBtn = document.getElementById("retryBtn");
+
+// Client-side convenience only — the server re-checks everything
+// (extension allowlist + magic bytes) and never trusts the browser.
+const OK_TYPES = [
+  ".pdf", ".jpg", ".jpeg", ".png", ".webp",
+  ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
+  ".odt", ".ods", ".odp",
+  ".txt", ".csv",
+];
+
+let failedJobId = null;
 
 function show(text, cls) {
   resultDiv.textContent = text;
   resultDiv.className = cls || "";
 }
 
+function retryControls(visible) {
+  retryBtn.style.display = visible ? "block" : "none";
+}
+
+// Re-print a failed job from its stored upload (p14) — no re-upload
+// needed. Resumes polling as if the job had just been queued.
+async function retryJob() {
+  if (!failedJobId) { return; }
+  const pin = document.getElementById("pin").value.trim();
+  const headers = pin ? { "X-API-PIN": pin } : {};
+  retryControls(false);
+  show("🔁 Retrying job " + failedJobId + "…", "ok");
+  try {
+    const response = await fetch("/jobs/" + failedJobId + "/retry",
+                                 { method: "POST", headers });
+    const data = await response.json();
+    if (response.ok) {
+      poll(failedJobId, 0);
+    } else {
+      show("❌ Retry refused: " + (data.detail || response.status), "err");
+    }
+  } catch (networkError) {
+    show("❌ Could not reach the server. Are you on the same Wi-Fi?",
+         "err");
+  }
+}
+
 async function sendPrint() {
   const fileInput = document.getElementById("file");
   const file = fileInput.files[0];
 
-  if (!file) { show("Pick a PDF first.", "err"); return; }
-  if (!file.name.toLowerCase().endsWith(".pdf")) {
-    show("That doesn't look like a PDF file.", "err");
+  if (!file) { show("Pick a file first.", "err"); return; }
+  if (!OK_TYPES.some(ext => file.name.toLowerCase().endsWith(ext))) {
+    show("That file type isn't supported yet — PDF, images, Office "
+         + "documents, or TXT/CSV.", "err");
     return;
   }
 
@@ -89,6 +204,12 @@ async function sendPrint() {
   try {
     const body = new FormData();
     body.append("file", file);            // field name must be "file"
+
+    // Print options (Phase 7) — all optional; empty fields mean defaults.
+    body.append("copies", document.getElementById("copies").value || "1");
+    body.append("pages", document.getElementById("pages").value.trim());
+    body.append("paper", document.getElementById("paper").value);
+    body.append("color_mode", document.getElementById("colorMode").value);
 
     // Send the PIN header only if the user typed one; the server ignores
     // it entirely when no PIN is configured (auth disabled).
@@ -136,15 +257,20 @@ async function poll(jobId, attempt) {
     }
     const job = await response.json();
     if (job.status === "done") {
+      retryControls(false);
       show("🖨️ Printed to " + (job.printer || "printer") + "!\\njob " + jobId,
            "ok");
       return;
     }
     if (job.status === "failed") {
-      show("❌ Print failed: " + (job.error || "unknown reason"), "err");
+      failedJobId = jobId;
+      retryControls(true);
+      show("❌ Print failed: " + (job.error || "unknown reason") +
+           "\\nYou can retry it from the stored copy.", "err");
       return;
     }
     if (job.status === "cancelled") {
+      retryControls(false);
       show("Job " + jobId + " was cancelled.", "err");
       return;
     }
@@ -164,3 +290,11 @@ async function poll(jobId, attempt) {
 def index():
     """Serve the upload page. Opening the server's URL on the phone IS the app."""
     return PAGE
+
+
+@router.get("/favicon.svg", include_in_schema=False)
+@router.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    """Serve the SVG icon for browser tabs."""
+    return Response(content=FAVICON_SVG, media_type="image/svg+xml")
+
