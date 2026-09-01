@@ -75,7 +75,9 @@ The only PDF-specific code: `uploads.py` (validate/save/sweep), `config.py`
   **`submit_pdf()` untouched**; logging; startup sweep pattern; tests/CI
   conventions; SumatraPDF itself.
 - **Modify (surgical):** `uploads.py` (generic validation, real extension,
-  sweep everything), `config.py` (format-related settings), `pipeline.py`
+  sweep everything — post-p16: dotfiles like `.gitkeep` survive, they only
+  keep the empty directory tracked in git), `config.py` (format-related
+  settings), `pipeline.py`
   (detect → processor → submit; real `converting`/`printing` states;
   conversion lock), `models/printing.py` (+`converting`, +`format` field),
   `api/print.py` + `api/web.py` (generic messages, wider accept list).
@@ -274,6 +276,12 @@ AV scanning — ⚪ v2+ options.
   job (JSON column + migration for older DBs) and reused by retry, web
   page gains the collapsible print-options dialog, `spike_t5 --paper
   long-bond` ready for the 8.5×13 check.
+  **Fixed post-p16:** the pipeline hands `build_print_settings()` the
+  job's STORED options — a plain dict (`api/print.py` stores
+  `model_dump()`; retry passes `job.options`) — and a truthy dict used to
+  crash it with AttributeError, failing every job, options chosen or not.
+  Dicts are now re-validated into `PrintOptions`; unknown keys are
+  ignored, so older job rows stay loadable.
 
 Each phase: ruff + pytest + ≥90 % coverage gate; README +
 SOURCE_OF_TRUTH updated; one commit per phase (p10, p11, …).

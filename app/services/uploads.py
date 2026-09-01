@@ -22,8 +22,9 @@ service enforces a policy instead (docs/MULTI_FORMAT_PLAN.md §6/§9):
 Anything still in uploads/ when the service starts is stale (the previous
 run died before cleanup), so the app sweeps it on startup — the cheap
 insurance SOURCE_OF_TRUTH Section 8 asks for. uploads/ is service-managed
-(every name in it is server-generated), so the sweep now removes ANY file,
-not just PDFs.
+(every name in it is server-generated), so the sweep removes any file —
+except dotfiles like .gitkeep, which only exist to keep the (empty)
+directory tracked in git and must survive cleanup.
 """
 
 import uuid
@@ -186,12 +187,17 @@ def save_upload(data: bytes, ext: str = ".pdf") -> tuple[str, Path]:
 
 
 def sweep_stale_uploads() -> int:
-    """Delete leftovers from a previous run. Returns how many were removed."""
+    """Delete leftovers from a previous run. Returns how many were removed.
+
+    Dotfiles (".gitkeep" and friends) are kept — they exist only so git
+    tracks the empty uploads/ directory in the repo; they are not job
+    leftovers and must survive every sweep.
+    """
     ensure_upload_dir()
     removed = 0
     for stale in UPLOAD_DIR.iterdir():
-        if not stale.is_file():
-            continue  # directories (or oddities) are skipped, not deleted
+        if not stale.is_file() or stale.name.startswith("."):
+            continue  # directories (or oddities) and dotfiles are skipped, not deleted
         try:
             stale.unlink()
             removed += 1
