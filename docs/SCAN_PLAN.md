@@ -2,8 +2,9 @@
 
 Status: **approved plan, compatibility-reviewed (§0); Phase 0 COMPLETE —
 S1/S2/S3/S4 all PASS on the real L3210 (2026-09-01), including the
-unplugged clean-degradation proof. No app code written yet — Phase 1
-(detection-only) is next. Branch `scan-feature`.**
+unplugged clean-degradation proof. Phase 1 (detection) LANDED —
+`GET /scanners` live, print code untouched. Next: Phase 2 (scan
+pipeline). Branch `scan-feature`.**
 Goal: add an optional **scan** capability (Android → Python service →
 Windows → USB → printer's scanner glass → back to phone) to the existing
 print service, **without ever affecting printing** on a printer that has
@@ -330,6 +331,23 @@ the Scan section. **Ships something real and testable — "the page
 correctly hides Scan on a scanner-less setup" — before any scanning code
 exists at all.**
 
+**Landed (2026-09-01):** `app/scanner/windows.py` (`list_scan_devices`,
+`scan_available`, `scanning_supported` = the two gates ANDed; lazy
+`win32com.client` import; never raises, per-entry resilience),
+`app/models/scanning.py` (`ScanDevice`, `ScannersInfo` — scan's own
+models, separate from printing's), `app/api/scanners.py`
+(`GET /scanners`, never errors, no PIN on the read-only GET),
+`ENABLE_SCAN` in config + `.env.example`, one additive router mount in
+`main.py`, and the web page's Scan section that renders only when
+`/scanners` reports a scanner (its placeholder button is replaced in
+Phase 3). Tests: a `fake_win32com` fixture in conftest (mirror of
+`fake_win32print`; both `win32com` and `win32com.client` injected),
+9 unit tests (found / none / not-a-scanner / COM failure / pywin32
+missing / broken entry / name fallback / kill switch) and 5 API tests
+pinning the never-500s contract. Suite: 285 tests, 96.7 % coverage,
+ruff clean. **Print code untouched** — `app/printer/`, `pipeline.py`,
+`jobs.py` byte-for-byte unchanged.
+
 ### Phase 2 — basic scan pipeline
 
 `POST /scan` (flatbed, default resolution/color only, PDF output),
@@ -408,6 +426,6 @@ Same CI gates apply: `ruff check .` + `pytest --cov-fail-under=90`.
 *This document was compatibility-reviewed against the code (§0) and
 approved. Phase 0's spike is CLOSED: S1 (plugged + unplugged), S2, S3 and
 S4 all PASS on the real L3210 — the scan feature is proven feasible with
-zero new dependencies, and a scanner-less setup is proven safe. No app
-code has been implemented yet — Phase 1 (detection-only) is the next
+zero new dependencies, and a scanner-less setup is proven safe. Phase 1
+(detection) has landed. Phase 2 (the basic scan pipeline) is the next
 slice to build.*

@@ -19,6 +19,7 @@ Rule of the whole suite: tests must pass identically on any machine — no
 real printer, no real SumatraPDF, no real .env file is ever consulted.
 """
 
+import itertools
 import sys
 import threading
 import time
@@ -131,6 +132,87 @@ def fake_win32print(monkeypatch) -> types.ModuleType:
 
     monkeypatch.setitem(sys.modules, "win32print", fake)
     return fake
+
+
+@pytest.fixture
+def fake_win32com(monkeypatch):
+    """A stand-in for the WIA automation layer, injected into sys.modules.
+
+    app/scanner/windows.py imports win32com.client INSIDE its functions —
+    the same trick app/printer/windows.py uses for win32print — so a fake
+    module is picked up by that import, making scanner detection testable
+    on any OS (the Ubuntu CI runner has no real pywin32 at all).
+
+    BOTH "win32com" and "win32com.client" are injected: a dotted import
+    imports the parent package first, so both names must exist.
+
+    Usage:
+        fake_win32com.add_device()                        # the L3210 by default
+        fake_win32com.add_device(name="Cam", wia_type=2)  # a camera, not a scanner
+        fake_win32com.fail_dispatch(RuntimeError("..."))  # WIA itself blows up
+    """
+    client = types.ModuleType("win32com.client")
+    package = types.ModuleType("win32com")
+    package.client = client
+
+    sequence = itertools.count(1)
+    state: dict = {"fail": None}
+
+    class FakeDeviceInfos:
+        def __init__(self):
+            self.items = []
+
+        @property
+        def Count(self):
+            return len(self.items)
+
+        def Item(self, index):
+            if not 1 <= index <= len(self.items):
+                raise IndexError(f"WIA index {index} out of range")
+            return self.items[index - 1]  # 1-based, like the real WIA
+
+    infos = FakeDeviceInfos()
+    manager = types.SimpleNamespace(DeviceInfos=infos)
+
+    def dispatch(prog_id):
+        if state["fail"] is not None:
+            raise state["fail"]
+        if prog_id != "WIA.DeviceManager":
+            raise ValueError(f"unexpected ProgID: {prog_id!r}")
+        return manager
+
+    client.Dispatch = dispatch
+
+    def add_device(
+        name: str = "EPSON L3210 Series",
+        wia_type: int = 1,
+        device_id=None,
+        no_name: bool = False,
+    ):
+        """Add one WIA DeviceInfo. no_name=True simulates a device whose
+        Properties("Name") read fails (the _display_name fallback path)."""
+
+        def properties(prop_name):
+            if no_name:
+                raise RuntimeError(f"no {prop_name} property")
+            return types.SimpleNamespace(Value=name)
+
+        info = types.SimpleNamespace(
+            Type=wia_type,
+            DeviceID=device_id or f"wia-device-{next(sequence)}",
+            Properties=properties,
+        )
+        infos.items.append(info)
+        return info
+
+    def fail_dispatch(exc: Exception):
+        state["fail"] = exc
+
+    monkeypatch.setitem(sys.modules, "win32com", package)
+    monkeypatch.setitem(sys.modules, "win32com.client", client)
+    return types.SimpleNamespace(
+        infos=infos, add_device=add_device, fail_dispatch=fail_dispatch
+    )
 
 
 class FakePrintResult:

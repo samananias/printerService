@@ -134,6 +134,18 @@ PAGE = """<!DOCTYPE html>
       </select>
     </label>
   </details>
+
+  <!-- Scan section (docs/SCAN_PLAN.md §6): the JS below renders this ONLY
+       when GET /scanners reports a scanner. On a scanner-less setup it
+       stays hidden and the page is exactly the print-only one. -->
+  <div id="scanSection" style="display:none; margin-top:14px;">
+    <p class="sub" style="margin-bottom:8px;">
+      📇 Scanner detected: <span id="scanName"></span>
+    </p>
+    <button disabled style="background:#93b4f5;">
+      Scan — arriving with the next service update
+    </button>
+  </div>
 </div>
 
 <script>
@@ -281,6 +293,24 @@ async function poll(jobId, attempt) {
     setTimeout(() => poll(jobId, attempt + 1), 3000);
   }
 }
+
+// Scan feature (docs/SCAN_PLAN.md §6): ask the server ONCE whether this
+// printer setup can scan at all. No scanner (or the feature disabled) →
+// the section never renders and the page stays the familiar print-only
+// one. Detection failure must never break the page, hence the catch.
+(async function checkScanner() {
+  try {
+    const response = await fetch("/scanners");
+    if (!response.ok) { return; }
+    const info = await response.json();
+    if (!info.available || !info.devices.length) { return; }
+    document.getElementById("scanName").textContent =
+      info.devices[0].name || "scanner";
+    document.getElementById("scanSection").style.display = "block";
+  } catch (e) {
+    // Stay print-only (SCAN_PLAN §3: detection is never load-bearing).
+  }
+})();
 </script>
 </body>
 </html>"""

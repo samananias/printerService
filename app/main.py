@@ -33,6 +33,7 @@ from fastapi import FastAPI
 from app.api.jobs import router as jobs_router
 from app.api.print import router as print_router
 from app.api.printers import router as printers_router
+from app.api.scanners import router as scanners_router
 from app.api.web import router as web_router
 from app.services import jobs
 from app.services.logging_setup import setup_logging
@@ -90,4 +91,9 @@ def health():
 app.include_router(web_router)
 app.include_router(printers_router)
 app.include_router(jobs_router)
+
+# GET /scanners (docs/SCAN_PLAN.md Phase 1): additive scan-feature
+# discovery. The endpoint never errors — on a scanner-less setup it just
+# reports available=false, and nothing else in the app changes.
+app.include_router(scanners_router)
 
