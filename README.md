@@ -207,7 +207,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 *Or via the direct one-liner (without manual activation):*
 ```bash
-.venv\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+.venv/Scripts/python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
 ### 💡 Runtime Notes
