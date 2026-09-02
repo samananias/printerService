@@ -2,9 +2,10 @@
 
 Status: **approved plan, compatibility-reviewed (§0); Phase 0 COMPLETE —
 S1/S2/S3/S4 all PASS on the real L3210 (2026-09-01). Phases 1–2 LANDED,
-plus the per-thread COM fix (2026-09-02) caught by the live smoke-check
-(CoInitialize on background threads; proxies die before CoUninitialize).
-Next: Phase 3 (web UI). Branch `scan-feature`.**
+plus the per-thread COM fix (2026-09-02) caught by the live smoke-check.
+Phase 3 (web UI: real Scan button + polling + download link) LANDED —
+the scan feature is fully usable from the phone. Next: Phase 4 (scan
+options). Branch `scan-feature`.**
 Goal: add an optional **scan** capability (Android → Python service →
 Windows → USB → printer's scanner glass → back to phone) to the existing
 print service, **without ever affecting printing** on a printer that has
@@ -398,6 +399,20 @@ thread-context enumeration is warning-free.
 Scan button, status polling, download/view link — reusing the existing
 page's polling pattern rather than inventing a new one.
 
+**Landed (2026-09-02):** the page's placeholder Scan section became real —
+`app/api/web.py` now ships an enabled **Scan** button (`id="scanBtn"`,
+`startScan()`) that POSTs `/scan` with the same PIN-header handling as the
+Print button, then polls `GET /scan/jobs/{id}` on print's 2 s cadence
+(`pollScan`, attempt cap ~2.5 min to cover the spike's 40–60 s transfers
+plus print load). On `done` it renders a **View / Download** link built
+from the server-issued job id (`/scan/jobs/<id>/download` — nothing from
+the server enters `innerHTML`); `failed`/`cancelled` show the server's
+message and re-enable the button. The button stays disabled while a scan
+is in flight — a flatbed can only do one page at a time, and a second tap
+would just hit `WIA_ERROR_BUSY` instead of queueing usefully. Web-page
+tests assert the Scan UI ships and the section is `display:none` by
+default (SCAN_PLAN §1 answer 5 — printing stays first).
+
 ### Phase 4 — scan options
 
 `dpi`, `color_mode`, `format=png|jpeg` escape hatch, all strictly
@@ -466,6 +481,6 @@ Same CI gates apply: `ruff check .` + `pytest --cov-fail-under=90`.
 *This document was compatibility-reviewed against the code (§0) and
 approved. Phase 0's spike is CLOSED: S1 (plugged + unplugged), S2, S3 and
 S4 all PASS on the real L3210 — the scan feature is proven feasible with
-zero new dependencies, and a scanner-less setup is proven safe. Phase 1
-(detection) and Phase 2 (basic scan pipeline) have landed. Phase 3 (web
-UI: scan button, polling, download link) is the next slice to build.*
+zero new dependencies, and a scanner-less setup is proven safe. Phases 1
+(detection), 2 (basic scan pipeline) and 3 (web UI) have landed. Phase 4
+(scan options: dpi, color_mode, format) is the next slice to build.*

@@ -45,3 +45,26 @@ class TestWebPage:
         assert "image/svg+xml" in response.headers["content-type"]
         assert "<svg" in response.text
 
+
+class TestScanWebUi:
+    """Phase 3 (docs/SCAN_PLAN.md §6/§8): the page ships the Scan UI even
+    though it only *renders* it when /scanners reports a scanner — the
+    same way the print form is always in the HTML."""
+
+    def test_page_includes_the_scan_button_and_flow(self, client):
+        page = client.get("/").text
+        assert 'id="scanSection"' in page            # hidden until a scanner
+        assert 'id="scanBtn"' in page                 # the real button
+        assert 'onclick="startScan()"' in page
+        assert 'fetch("/scan"' in page or 'fetch("/scan")' in page
+        assert "/scan/jobs/" in page                  # poll + download link
+        assert "pollScan" in page
+        assert "startScan" in page
+
+    def test_page_is_still_print_first(self, client):
+        page = client.get("/").text
+        # The scan section is display:none by default — printing stays the
+        # first thing on the page (SCAN_PLAN §1 answer 5).
+        assert 'id="scanSection" style="display:none' in page
+        assert 'id="printBtn"' in page
+
