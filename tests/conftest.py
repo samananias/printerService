@@ -172,7 +172,27 @@ def fake_win32com(monkeypatch):
     package.client = client
 
     sequence = itertools.count(1)
-    state: dict = {"fail": None}
+    state: dict = {"fail": None, "settings": {}}
+
+    class _FakeProp:
+        """A WIA item property whose Value can be set — and every set is
+        recorded in state['settings'], so tests can assert the scanner was
+        actually asked for the requested dpi / color mode (Phase 4)."""
+
+        __slots__ = ("_value", "key")
+
+        def __init__(self, value, key):
+            self._value = value
+            self.key = key
+
+        @property
+        def Value(self):
+            return self._value
+
+        @Value.setter
+        def Value(self, v):
+            self._value = v
+            state["settings"][self.key] = v
 
     class FakeDeviceInfos:
         def __init__(self):
@@ -221,9 +241,17 @@ def fake_win32com(monkeypatch):
         """
 
         def properties(prop_name):
-            if no_name:
+            if no_name and str(prop_name) in ("Name", "Item Name"):
+                # Preserve the detection fallback path: a device whose name
+                # read fails. Best-effort option-setting (resolution /
+                # intent) is still allowed on such a device.
                 raise RuntimeError(f"no {prop_name} property")
-            return types.SimpleNamespace(Value=name)
+            key = str(prop_name)
+            if key in ("Name", "Item Name"):
+                value = name
+            else:
+                value = state["settings"].get(key)
+            return _FakeProp(value, key)
 
         def transfer(_format_id):
             if entered is not None:
@@ -277,7 +305,10 @@ def fake_win32com(monkeypatch):
     monkeypatch.setitem(sys.modules, "win32com", package)
     monkeypatch.setitem(sys.modules, "win32com.client", client)
     return types.SimpleNamespace(
-        infos=infos, add_device=add_device, fail_dispatch=fail_dispatch
+        infos=infos,
+        add_device=add_device,
+        fail_dispatch=fail_dispatch,
+        settings=state["settings"],
     )
 
 

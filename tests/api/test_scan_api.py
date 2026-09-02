@@ -69,7 +69,7 @@ class TestScanStatus:
         self, client, fake_win32com, monkeypatch
     ):
         fake_win32com.add_device()
-        monkeypatch.setattr("app.api.scan.start_scan", lambda job_id: None)
+        monkeypatch.setattr("app.api.scan.start_scan", lambda job_id, options=None: None)
         job_id = client.post("/scan").json()["job_id"]
 
         body = client.get(f"/scan/jobs/{job_id}").json()
@@ -80,7 +80,7 @@ class TestScanStatus:
 class TestScanDownload:
     def test_download_before_done_is_409(self, client, fake_win32com, monkeypatch):
         fake_win32com.add_device()
-        monkeypatch.setattr("app.api.scan.start_scan", lambda job_id: None)
+        monkeypatch.setattr("app.api.scan.start_scan", lambda job_id, options=None: None)
         job_id = client.post("/scan").json()["job_id"]
 
         response = client.get(f"/scan/jobs/{job_id}/download")
@@ -103,10 +103,63 @@ class TestScanDownload:
         assert client.get("/scan/jobs/ghost/download").status_code == 404
 
 
+class TestPostScanOptions:
+    def test_accepts_valid_options_and_serves_a_png(
+        self, client, fake_win32com, wait_for_scan_status
+    ):
+        fake_win32com.add_device()
+        response = client.post(
+            "/scan",
+            data={"dpi": "150", "color_mode": "greyscale", "format": "png"},
+        )
+        assert response.status_code == 201
+        job_id = response.json()["job_id"]
+
+        job = wait_for_scan_status(job_id, "done")
+        assert job.filename.endswith(".png")
+
+        scan_job = client.get(f"/scan/jobs/{job_id}").json()
+        assert scan_job["download_url"].endswith("/download")
+        assert scan_job["format"] == "png"
+
+        dl = client.get(f"/scan/jobs/{job_id}/download")
+        assert dl.status_code == 200
+        assert dl.content[:8] == b"\x89PNG\r\n\x1a\n"
+        assert "attachment" in dl.headers["content-disposition"]
+
+    def test_jpeg_format_downloads_a_real_jpeg(
+        self, client, fake_win32com, wait_for_scan_status
+    ):
+        fake_win32com.add_device()
+        job_id = client.post("/scan", data={"format": "jpeg"}).json()["job_id"]
+        wait_for_scan_status(job_id, "done")
+
+        dl = client.get(f"/scan/jobs/{job_id}/download")
+        assert dl.status_code == 200
+        assert dl.content[:2] == b"\xff\xd8"  # JPEG SOI marker
+
+    def test_invalid_dpi_is_422(self, client, fake_win32com):
+        fake_win32com.add_device()
+        response = client.post("/scan", data={"dpi": "400"})
+        assert response.status_code == 422
+        assert "DPI" in response.json()["detail"]
+
+    def test_invalid_color_mode_is_422(self, client, fake_win32com):
+        fake_win32com.add_device()
+        # "monochrome" is the print side's name — scan is color/greyscale.
+        response = client.post("/scan", data={"color_mode": "monochrome"})
+        assert response.status_code == 422
+
+    def test_invalid_format_is_422(self, client, fake_win32com):
+        fake_win32com.add_device()
+        response = client.post("/scan", data={"format": "docx"})
+        assert response.status_code == 422
+
+
 class TestScanCancel:
     def test_cancel_a_queued_scan(self, client, fake_win32com, monkeypatch):
         fake_win32com.add_device()
-        monkeypatch.setattr("app.api.scan.start_scan", lambda job_id: None)
+        monkeypatch.setattr("app.api.scan.start_scan", lambda job_id, options=None: None)
         job_id = client.post("/scan").json()["job_id"]
 
         response = client.delete(f"/scan/jobs/{job_id}")
@@ -122,7 +175,7 @@ class TestScanCancel:
         self, client, fake_win32com, monkeypatch
     ):
         fake_win32com.add_device()
-        monkeypatch.setattr("app.api.scan.start_scan", lambda job_id: None)
+        monkeypatch.setattr("app.api.scan.start_scan", lambda job_id, options=None: None)
         job_id = client.post("/scan").json()["job_id"]
         monkeypatch.setattr("app.services.auth.API_PIN", "1234")
 

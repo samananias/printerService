@@ -63,6 +63,47 @@ class TestHappyPath:
         wait_for_scan_status("slowscan", ScanStatus.DONE)
 
 
+class TestOutputFormats:
+    def test_png_output_keeps_the_raw_png_as_deliverable(
+        self, fake_win32com, wait_for_scan_status
+    ):
+        fake_win32com.add_device()
+        scan_jobs.create_job("pngout", {"format": "png"})
+        start_scan("pngout", {"format": "png"})
+
+        job = wait_for_scan_status("pngout", ScanStatus.DONE)
+        assert job.filename == "scan-pngout.png"
+        out = downloads.result_path("pngout", "png")
+        assert out.is_file()
+        assert out.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"  # real PNG magic
+        assert job.size_bytes > 0
+
+    def test_jpeg_output_is_a_real_jpeg(
+        self, fake_win32com, wait_for_scan_status
+    ):
+        fake_win32com.add_device()
+        scan_jobs.create_job("jpgout", {"format": "jpeg"})
+        start_scan("jpgout", {"format": "jpeg"})
+
+        wait_for_scan_status("jpgout", ScanStatus.DONE)
+        out = downloads.result_path("jpgout", "jpg")
+        assert out.read_bytes()[:2] == b"\xff\xd8"  # JPEG SOI marker
+        assert not downloads.working_path("jpgout").exists()  # PNG was interim
+
+    def test_scan_options_reach_the_scanner(
+        self, fake_win32com, wait_for_scan_status
+    ):
+        fake_win32com.add_device()
+        scan_jobs.create_job("opts1", {"dpi": 300, "color_mode": "greyscale"})
+        start_scan("opts1", {"dpi": 300, "color_mode": "greyscale"})
+
+        wait_for_scan_status("opts1", ScanStatus.DONE)
+        # The fake WIA item recorded what it was asked for (Phase 4).
+        assert fake_win32com.settings.get("Horizontal Resolution") == 300
+        assert fake_win32com.settings.get("Vertical Resolution") == 300
+        assert fake_win32com.settings.get("Current Intent") == 2  # grayscale
+
+
 class TestFailures:
     def test_com_error_is_translated_to_a_human_message(
         self, fake_win32com, wait_for_scan_status

@@ -1,11 +1,10 @@
 # Scan Feature — Feasibility, Decision Record & Roadmap
 
 Status: **approved plan, compatibility-reviewed (§0); Phase 0 COMPLETE —
-S1/S2/S3/S4 all PASS on the real L3210 (2026-09-01). Phases 1–2 LANDED,
-plus the per-thread COM fix (2026-09-02) caught by the live smoke-check.
-Phase 3 (web UI: real Scan button + polling + download link) LANDED —
-the scan feature is fully usable from the phone. Next: Phase 4 (scan
-options). Branch `scan-feature`.**
+S1/S2/S3/S4 all PASS on the real L3210 (2026-09-01). Phases 1–4 LANDED —
+detection, basic scan pipeline, web UI, and scan options (dpi/color/
+format) — plus the per-thread COM fix (2026-09-02). The scan MVP is
+feature-complete. Next: any v2 polish; branch `scan-feature`.**
 Goal: add an optional **scan** capability (Android → Python service →
 Windows → USB → printer's scanner glass → back to phone) to the existing
 print service, **without ever affecting printing** on a printer that has
@@ -418,6 +417,28 @@ default (SCAN_PLAN §1 answer 5 — printing stays first).
 `dpi`, `color_mode`, `format=png|jpeg` escape hatch, all strictly
 validated — same spirit as the print side's Phase 7 options work.
 
+**Landed (2026-09-02):** `app/models/scanning.py` grew the strict
+allowlists (`SCAN_DPI_CHOICES = (150, 200, 300)` sized against the
+spike's real timings; `SCAN_COLOR_MODES`; `SCAN_FORMATS`) and
+`validate_scan_options()` → 422 on any violation (mirrors
+`validate_print_options`). `app/scanner/windows.py` applies the options
+to the WIA item best-effort — resolution via the standard
+Horizontal/Vertical Resolution properties, color via `Current Intent`
+(WIA_IPS_CUR_INTENT: 1=color, 2=greyscale) with a Bits-Per-Pixel
+fallback — a refusing driver keeps its default and the scan still runs.
+`app/services/scan_pipeline.py` produces the deliverable by format: pdf
+(the REAL ImageProcessor wrap), png (the raw PNG is the deliverable), or
+jpeg (Pillow encode); the scan store gained a `format` column (migration
+in `_get_conn`, like the print store's options column) so the download
+endpoint and the phone's filename follow the chosen format
+(`scan-<id>.pdf/.png/.jpg`). `POST /scan` accepts the three optional
+form fields; the web page's Scan options details offers the DPI/Color/
+Format selects in the print-options style. Tests: validation unit tests,
+pipeline png/jpeg/option-passthrough (asserting the fake WIA item was
+asked for 300 dpi greyscale), API options + 422s, web controls. Suite:
+342 tests, 95.7 % coverage, ruff clean. Verified live through uvicorn:
+bad dpi → 422, page ships the controls.
+
 ### ⚪ Explicitly future / out of scope for v1
 
 - Multi-page/ADF scanning (moot on this exact printer; revisit only if
@@ -482,5 +503,5 @@ Same CI gates apply: `ruff check .` + `pytest --cov-fail-under=90`.
 approved. Phase 0's spike is CLOSED: S1 (plugged + unplugged), S2, S3 and
 S4 all PASS on the real L3210 — the scan feature is proven feasible with
 zero new dependencies, and a scanner-less setup is proven safe. Phases 1
-(detection), 2 (basic scan pipeline) and 3 (web UI) have landed. Phase 4
-(scan options: dpi, color_mode, format) is the next slice to build.*
+(detection), 2 (basic scan pipeline), 3 (web UI) and 4 (scan options:
+dpi, color_mode, format) have landed — the scan MVP is complete.*

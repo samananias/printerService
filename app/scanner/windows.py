@@ -25,7 +25,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from app.config import ENABLE_SCAN
-from app.models.scanning import ScanDevice
+from app.models.scanning import DEFAULT_DPI, ScanDevice
 
 logger = logging.getLogger(__name__)
 
@@ -198,14 +198,17 @@ def _item_label(item) -> str:
     return ""
 
 
-def scan_flatbed(dest: Path) -> Path:
+def scan_flatbed(
+    dest: Path, dpi: int = DEFAULT_DPI, color_mode: str = "color"
+) -> Path:
     """Transfer one flatbed page to a PNG at `dest` (SCAN_PLAN §5 step 3).
 
-    Driver-default resolution and color — the user-facing options (dpi,
-    color_mode, format) arrive in Phase 4. The PNG lands ONLY if the
-    transfer succeeded: WIA's SaveFile refuses to overwrite (spike S4's
-    0x80070050 lesson), so the caller must pass a fresh server-generated
-    name — which every caller here does.
+    `dpi`/`color_mode` are the Phase 4 options, applied best-effort by the
+    WIA driver — a driver that refuses a value keeps its default (the
+    spike's 200-dpi request behaved exactly this way). The PNG lands ONLY
+    if the transfer succeeded: WIA's SaveFile refuses to overwrite (spike
+    S4's 0x80070050 lesson), so the caller must pass a fresh
+    server-generated name — which every caller here does.
 
     May raise RuntimeError with a phone-readable message (the scan
     pipeline records it as the job's error); the _com_apartment wrapper
@@ -214,7 +217,7 @@ def scan_flatbed(dest: Path) -> Path:
     """
     try:
         with _com_apartment():
-            _transfer_flatbed_via_com(dest)
+            _transfer_flatbed_via_com(dest, dpi, color_mode)
     except RuntimeError:
         raise  # already human-readable ("scanner was not found", ...)
     except Exception as exc:
@@ -222,7 +225,51 @@ def scan_flatbed(dest: Path) -> Path:
     return dest
 
 
-def _transfer_flatbed_via_com(dest: Path) -> None:
+def _apply_scan_options(item, dpi: int, color_mode: str) -> None:
+    """Request resolution/color on a WIA item, best-effort (never raises).
+
+    Resolution uses the standard "Horizontal/Vertical Resolution"
+    properties. Color uses WIA's "Current Intent" (WIA_IPS_CUR_INTENT,
+    with WIA_INTENT_IMAGE_TYPE_COLOR=1 / _GRAYSCALE=2), falling back to
+    "Bits Per Pixel" (24=RGB / 8=greyscale) for drivers that prefer it.
+    """
+    _set_item_option(item, "Horizontal Resolution", dpi)
+    _set_item_option(item, "Vertical Resolution", dpi)
+    intent = WIA_CUR_INTENT_BY_MODE.get(color_mode, WIA_INTENT_COLOR)
+    if not _set_item_option(
+        item, "Current Intent", intent, prop_id=WIA_IPS_CUR_INTENT
+    ):
+        _set_item_option(
+            item, "Bits Per Pixel", WIA_BITS_BY_MODE.get(color_mode, 24)
+        )
+
+
+def _set_item_option(item, prop_name: str, value, prop_id=None) -> bool:
+    """Best-effort set of one WIA item property; never raises. Returns
+    whether the driver accepted the set (by name, then by numeric id)."""
+    for key in (prop_name, prop_id):
+        if key is None:
+            continue
+        try:
+            item.Properties(key).Value = value
+            return True
+        except Exception:
+            continue
+    return False
+
+
+# WIA item option constants (Phase 4).
+WIA_IPS_CUR_INTENT = 6146  # WIA_IPS_CUR_INTENT — the color-intent property
+WIA_INTENT_COLOR = 1  # WIA_INTENT_IMAGE_TYPE_COLOR
+WIA_INTENT_GRAYSCALE = 2  # WIA_INTENT_IMAGE_TYPE_GRAYSCALE
+WIA_CUR_INTENT_BY_MODE = {
+    "color": WIA_INTENT_COLOR,
+    "greyscale": WIA_INTENT_GRAYSCALE,
+}
+WIA_BITS_BY_MODE = {"color": 24, "greyscale": 8}
+
+
+def _transfer_flatbed_via_com(dest: Path, dpi: int, color_mode: str) -> None:
     """One flatbed WIA transfer session (call inside _com_apartment)."""
     import win32com.client
 
@@ -239,6 +286,7 @@ def _transfer_flatbed_via_com(dest: Path) -> None:
             key=lambda i: "flat" not in _item_label(items.Item(i)).lower(),
         )
         item = items.Item(order[0])
+        _apply_scan_options(item, dpi, color_mode)
         image = item.Transfer(WIA_FORMAT_PNG)
         image.SaveFile(str(dest))
         return

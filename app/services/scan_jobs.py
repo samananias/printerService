@@ -26,7 +26,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from app.config import JOB_DB_PATH
-from app.models.scanning import ScanJob, ScanStatus
+from app.models.scanning import SCAN_FILE_EXT, ScanJob, ScanStatus
 
 # States a cancel may interrupt; done/failed/cancelled are terminal.
 CANCELLABLE = frozenset({ScanStatus.QUEUED, ScanStatus.SCANNING})
@@ -43,7 +43,8 @@ CREATE TABLE IF NOT EXISTS scan_jobs (
     status     TEXT NOT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
-    error      TEXT
+    error      TEXT,
+    format     TEXT NOT NULL DEFAULT 'pdf'
 )
 """
 
@@ -62,6 +63,14 @@ def _get_conn() -> sqlite3.Connection:
         _conn = sqlite3.connect(_db_path, check_same_thread=False)
         _conn.row_factory = sqlite3.Row
         _conn.execute(_SCHEMA)
+        try:
+            # Migrates databases created before Phase 4 (no format column).
+            # "duplicate column" means the migration already ran.
+            _conn.execute(
+                "ALTER TABLE scan_jobs ADD COLUMN format TEXT NOT NULL DEFAULT 'pdf'"
+            )
+        except sqlite3.OperationalError:
+            pass
         _conn.commit()
     return _conn
 
@@ -79,22 +88,26 @@ def _to_job(row: sqlite3.Row) -> ScanJob:
         created_at=datetime.fromisoformat(row["created_at"]),
         updated_at=datetime.fromisoformat(row["updated_at"]),
         error=row["error"],
+        format=row["format"],
     )
 
 
-def create_job(job_id: str) -> ScanJob:
+def create_job(job_id: str, options: dict | None = None) -> ScanJob:
     """Register a freshly accepted scan: queued, file not yet on disk.
 
     The filename is the download name the phone will see — server
-    generated like everything else in downloads/ (SCAN_PLAN §7).
+    generated like everything else in downloads/ (SCAN_PLAN §7), and its
+    extension follows the requested output format (Phase 4).
     """
-    filename = f"scan-{job_id[:8]}.pdf"
+    options = options or {}
+    format = options.get("format") or "pdf"
+    filename = f"scan-{job_id[:8]}.{SCAN_FILE_EXT[format]}"
     now = _now()
     with _lock:
         _get_conn().execute(
             "INSERT INTO scan_jobs (job_id, filename, size_bytes, status,"
-            " created_at, updated_at) VALUES (?, ?, 0, ?, ?, ?)",
-            (job_id, filename, ScanStatus.QUEUED, now, now),
+            " created_at, updated_at, format) VALUES (?, ?, 0, ?, ?, ?, ?)",
+            (job_id, filename, ScanStatus.QUEUED, now, now, format),
         )
         _get_conn().commit()
         row = _get_conn().execute(

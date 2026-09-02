@@ -22,13 +22,14 @@ def ensure_downloads_dir() -> None:
     DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def result_path(job_id: str) -> Path:
-    """The finished scan's location: downloads/<job_id>.pdf.
+def result_path(job_id: str, ext: str = "pdf") -> Path:
+    """The finished scan's location: downloads/<job_id>.<ext>.
 
-    Phase 2's one output format (the print side's one internal format, by
-    the same logic); the format= escape hatch arrives in Phase 4.
+    `ext` is the on-disk extension of the chosen format (pdf/png/jpg).
+    Phase 2 shipped the one PDF format; Phase 4's format=png|jpeg escape
+    hatch uses this to name the deliverable.
     """
-    return DOWNLOAD_DIR / f"{job_id}.pdf"
+    return DOWNLOAD_DIR / f"{job_id}.{ext}"
 
 
 def working_path(job_id: str) -> Path:

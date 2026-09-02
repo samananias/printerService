@@ -143,6 +143,31 @@ PAGE = """<!DOCTYPE html>
       📇 Scanner detected: <span id="scanName"></span>
     </p>
     <button id="scanBtn" onclick="startScan()">Scan</button>
+    <details style="margin-top:10px;">
+      <summary style="cursor:pointer; font-size:.85rem; color:#667;">
+        Scan options
+      </summary>
+      <label class="opt">Resolution
+        <select id="scanDpi">
+          <option value="150">150 dpi (faster)</option>
+          <option value="200" selected>200 dpi</option>
+          <option value="300">300 dpi (slower)</option>
+        </select>
+      </label>
+      <label class="opt">Color
+        <select id="scanColorMode">
+          <option value="color" selected>Color</option>
+          <option value="greyscale">Greyscale</option>
+        </select>
+      </label>
+      <label class="opt">Format
+        <select id="scanFormat">
+          <option value="pdf" selected>PDF (document)</option>
+          <option value="png">PNG (image)</option>
+          <option value="jpeg">JPEG (image)</option>
+        </select>
+      </label>
+    </details>
     <div id="scanResult" style="margin-top:10px; font-size:.92rem;
          white-space:pre-wrap; word-break:break-word;"></div>
   </div>
@@ -332,8 +357,14 @@ async function startScan() {
   scanShow("📨 Starting scan…", "ok");
   const pin = document.getElementById("pin").value.trim();
   const headers = pin ? { "X-API-PIN": pin } : {};
+  // Scan options (Phase 4): DPI, color mode, output format — strictly
+  // allowlisted server-side; the selects only ever offer valid values.
+  const body = new FormData();
+  body.append("dpi", document.getElementById("scanDpi").value);
+  body.append("color_mode", document.getElementById("scanColorMode").value);
+  body.append("format", document.getElementById("scanFormat").value);
   try {
-    const response = await fetch("/scan", { method: "POST", headers });
+    const response = await fetch("/scan", { method: "POST", headers, body });
     const data = await response.json();
     if (response.ok) {
       scanShow("📨 Scan queued — the flatbed is working. Checking status…", "ok");

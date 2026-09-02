@@ -68,3 +68,12 @@ class TestScanWebUi:
         assert 'id="scanSection" style="display:none' in page
         assert 'id="printBtn"' in page
 
+    def test_page_includes_the_scan_options(self, client):
+        # Phase 4: DPI / color / format selects, read by startScan.
+        page = client.get("/").text
+        assert 'id="scanDpi"' in page
+        assert 'id="scanColorMode"' in page
+        assert 'id="scanFormat"' in page
+        assert 'getElementById("scanDpi")' in page
+        assert 'getElementById("scanFormat")' in page
+

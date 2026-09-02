@@ -17,10 +17,17 @@ only — read-only GETs stay open (app/services/auth.py convention).
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Form, HTTPException
 from fastapi.responses import FileResponse
 
-from app.models.scanning import ScanAccepted, ScanJob, ScanStatus
+from app.models.scanning import (
+    DEFAULT_DPI,
+    SCAN_FILE_EXT,
+    ScanAccepted,
+    ScanJob,
+    ScanStatus,
+    validate_scan_options,
+)
 from app.scanner.windows import ENABLE_SCAN, scanning_supported
 from app.services import downloads, scan_jobs
 from app.services.auth import require_pin
@@ -48,19 +55,32 @@ def _gate() -> None:
 
 
 @router.post("/scan", response_model=ScanAccepted, status_code=201)
-def start_scan_job(_: None = Depends(require_pin)):
-    """Start a flatbed scan at the driver's defaults (user-facing options
-    arrive in Phase 4).
+def start_scan_job(
+    dpi: int = Form(DEFAULT_DPI),
+    color_mode: str = Form("color"),
+    format: str = Form("pdf"),
+    _: None = Depends(require_pin),
+):
+    """Start a flatbed scan (Phase 4: dpi / color_mode / format options).
 
-    Accepts immediately — the transfer takes tens of seconds (spike S2
-    measured 41 s at 200 dpi) — and hands the job to the background
-    pipeline. Poll GET /scan/jobs/{id} until it carries a download link.
+    All options are optional with safe defaults and strictly allowlisted —
+    validated BEFORE anything touches WIA, the same rule the print side
+    applies to its command-line-bound options (Phase 7). Accepts
+    immediately — the transfer takes tens of seconds (spike S2 measured
+    41 s at 200 dpi) — and hands the job to the background pipeline. Poll
+    GET /scan/jobs/{id} until it carries a download link.
     """
     _gate()
+    try:
+        options = validate_scan_options(dpi, color_mode, format).model_dump()
+    except ValueError as exc:
+        logger.warning("rejected scan request: %s", exc)
+        raise HTTPException(status_code=422, detail=str(exc))
+
     job_id = uuid.uuid4().hex
-    job = scan_jobs.create_job(job_id)
-    logger.info("scan job %s accepted", job_id)
-    start_scan(job_id)
+    job = scan_jobs.create_job(job_id, options)
+    logger.info("scan job %s accepted (%s)", job_id, options)
+    start_scan(job_id, options)
     return ScanAccepted(job_id=job.job_id, status=job.status)
 
 
@@ -85,7 +105,7 @@ def download_scan(job_id: str):
             detail=f"Scan is '{job.status}' — there is nothing to download "
             "until it's done.",
         )
-    path = downloads.result_path(job_id)
+    path = downloads.result_path(job_id, SCAN_FILE_EXT[job.format])
     if not path.is_file():
         raise HTTPException(
             status_code=404,
