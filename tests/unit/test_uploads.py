@@ -221,3 +221,16 @@ class TestSweepStaleUploads:
     def test_creates_dir_when_missing(self, tmp_upload_dir):
         assert sweep_stale_uploads() == 0
         assert tmp_upload_dir.exists()
+
+    def test_dotfiles_like_gitkeep_survive_the_sweep(self, tmp_upload_dir):
+        # .gitkeep exists only so git tracks the (normally empty) uploads/
+        # directory in the repo. It is not a job leftover and must survive
+        # every sweep — regression: the startup sweep used to delete it,
+        # silently dropping uploads/ from the repository.
+        tmp_upload_dir.mkdir(parents=True)
+        (tmp_upload_dir / ".gitkeep").write_bytes(b"")
+        (tmp_upload_dir / "stale.pdf").write_bytes(b"%PDF-x")
+
+        assert sweep_stale_uploads() == 1
+        assert (tmp_upload_dir / ".gitkeep").is_file()
+        assert not (tmp_upload_dir / "stale.pdf").exists()

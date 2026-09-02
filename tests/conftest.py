@@ -19,6 +19,7 @@ Rule of the whole suite: tests must pass identically on any machine — no
 real printer, no real SumatraPDF, no real .env file is ever consulted.
 """
 
+import itertools
 import sys
 import threading
 import time
@@ -29,7 +30,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.printer import windows
-from app.services import jobs
+from app.services import jobs, scan_jobs
 
 # The printer name the fakes pretend Windows reports (matching the real
 # L3210's queue name keeps the tests readable).
@@ -51,6 +52,10 @@ def fresh_job_store(tmp_path, monkeypatch):
     """
     monkeypatch.setattr(jobs, "_db_path", tmp_path / "jobs.sqlite3")
     monkeypatch.setattr(jobs, "_conn", None)
+    # The scan store shares the DB FILE but owns its own connection —
+    # patch both halves (SCAN_PLAN §0: scan never touches print's store).
+    monkeypatch.setattr(scan_jobs, "_db_path", tmp_path / "jobs.sqlite3")
+    monkeypatch.setattr(scan_jobs, "_conn", None)
 
 
 @pytest.fixture(autouse=True)
@@ -64,6 +69,18 @@ def tmp_upload_dir(tmp_path, monkeypatch) -> Path:
     upload_dir = tmp_path / "uploads"
     monkeypatch.setattr("app.services.uploads.UPLOAD_DIR", upload_dir)
     return upload_dir
+
+
+@pytest.fixture(autouse=True)
+def tmp_download_dir(tmp_path, monkeypatch) -> Path:
+    """Redirect downloads/ to a temp dir for every test — scan artifacts
+    (raw PNG, finished PDF) and the startup sweep, same rule as
+    tmp_upload_dir (SCAN_PLAN §5: downloads/ is uploads/' twin)."""
+    download_dir = tmp_path / "downloads"
+    # Tests write into it directly — the dir must exist up front.
+    download_dir.mkdir()
+    monkeypatch.setattr("app.services.downloads.DOWNLOAD_DIR", download_dir)
+    return download_dir
 
 
 # ---------------------------------------------------------------------------
@@ -131,6 +148,168 @@ def fake_win32print(monkeypatch) -> types.ModuleType:
 
     monkeypatch.setitem(sys.modules, "win32print", fake)
     return fake
+
+
+@pytest.fixture
+def fake_win32com(monkeypatch):
+    """A stand-in for the WIA automation layer, injected into sys.modules.
+
+    app/scanner/windows.py imports win32com.client INSIDE its functions —
+    the same trick app/printer/windows.py uses for win32print — so a fake
+    module is picked up by that import, making scanner detection testable
+    on any OS (the Ubuntu CI runner has no real pywin32 at all).
+
+    BOTH "win32com" and "win32com.client" are injected: a dotted import
+    imports the parent package first, so both names must exist.
+
+    Usage:
+        fake_win32com.add_device()                        # the L3210 by default
+        fake_win32com.add_device(name="Cam", wia_type=2)  # a camera, not a scanner
+        fake_win32com.fail_dispatch(RuntimeError("..."))  # WIA itself blows up
+    """
+    client = types.ModuleType("win32com.client")
+    package = types.ModuleType("win32com")
+    package.client = client
+
+    sequence = itertools.count(1)
+    state: dict = {"fail": None, "settings": {}}
+
+    class _FakeProp:
+        """A WIA item property whose Value can be set — and every set is
+        recorded in state['settings'], so tests can assert the scanner was
+        actually asked for the requested dpi / color mode (Phase 4)."""
+
+        __slots__ = ("_value", "key")
+
+        def __init__(self, value, key):
+            self._value = value
+            self.key = key
+
+        @property
+        def Value(self):
+            return self._value
+
+        @Value.setter
+        def Value(self, v):
+            self._value = v
+            state["settings"][self.key] = v
+
+    class FakeDeviceInfos:
+        def __init__(self):
+            self.items = []
+
+        @property
+        def Count(self):
+            return len(self.items)
+
+        def Item(self, index):
+            if not 1 <= index <= len(self.items):
+                raise IndexError(f"WIA index {index} out of range")
+            return self.items[index - 1]  # 1-based, like the real WIA
+
+    infos = FakeDeviceInfos()
+    manager = types.SimpleNamespace(DeviceInfos=infos)
+
+    def dispatch(prog_id):
+        if state["fail"] is not None:
+            raise state["fail"]
+        if prog_id != "WIA.DeviceManager":
+            raise ValueError(f"unexpected ProgID: {prog_id!r}")
+        return manager
+
+    client.Dispatch = dispatch
+
+    def add_device(
+        name: str = "EPSON L3210 Series",
+        wia_type: int = 1,
+        device_id=None,
+        no_name: bool = False,
+        transfer_error: Exception | None = None,
+        entered: threading.Event | None = None,
+        gate: threading.Event | None = None,
+        corrupt_png: bool = False,
+    ):
+        """Add one WIA DeviceInfo.
+
+        no_name=True simulates a device whose Properties("Name") read
+        fails (the _display_name fallback path).
+        transfer_error: item.Transfer() raises it (WIA trouble mid-scan).
+        entered/gate: a SLOW scanner — Transfer() sets entered, then waits
+        on gate before "saving" — letting a test cancel mid-transfer.
+        corrupt_png: SaveFile writes garbage bytes, so the REAL
+        ImageProcessor refuses the image (wrap-failure path).
+        """
+
+        def properties(prop_name):
+            if no_name and str(prop_name) in ("Name", "Item Name"):
+                # Preserve the detection fallback path: a device whose name
+                # read fails. Best-effort option-setting (resolution /
+                # intent) is still allowed on such a device.
+                raise RuntimeError(f"no {prop_name} property")
+            key = str(prop_name)
+            if key in ("Name", "Item Name"):
+                value = name
+            else:
+                value = state["settings"].get(key)
+            return _FakeProp(value, key)
+
+        def transfer(_format_id):
+            if entered is not None:
+                entered.set()
+            if transfer_error is not None:
+                raise transfer_error
+            if gate is not None:
+                gate.wait(timeout=10)
+
+            def save_file(path):
+                if corrupt_png:
+                    # SaveFile hands a str path (the production call passes
+                    # str(dest)) — write garbage the ImageProcessor refuses.
+                    Path(path).write_bytes(b"not an image at all")
+                    return
+                # A tiny REAL PNG — the pipeline wraps it with the real
+                # ImageProcessor, which needs genuine image bytes.
+                from PIL import Image
+
+                Image.new("RGB", (16, 12), "white").save(path, "PNG")
+
+            return types.SimpleNamespace(SaveFile=save_file)
+
+        # The transferable flatbed item, reachable exactly the way the
+        # production _open_flatbed_item() walks WIA:
+        # DeviceInfos -> info.Connect() -> device.Items -> Item(1).
+        item = types.SimpleNamespace(Transfer=transfer, Properties=properties)
+        items = types.SimpleNamespace(
+            Count=1,
+            Item=lambda index: item
+            if index == 1
+            else (_ for _ in ()).throw(IndexError(index)),
+        )
+
+        def connect():
+            return types.SimpleNamespace(Items=items)
+
+        info = types.SimpleNamespace(
+            Type=wia_type,
+            DeviceID=device_id or f"wia-device-{next(sequence)}",
+            Properties=properties,
+            Transfer=transfer,
+            Connect=connect,
+        )
+        infos.items.append(info)
+        return info
+
+    def fail_dispatch(exc: Exception):
+        state["fail"] = exc
+
+    monkeypatch.setitem(sys.modules, "win32com", package)
+    monkeypatch.setitem(sys.modules, "win32com.client", client)
+    return types.SimpleNamespace(
+        infos=infos,
+        add_device=add_device,
+        fail_dispatch=fail_dispatch,
+        settings=state["settings"],
+    )
 
 
 class FakePrintResult:
@@ -211,6 +390,29 @@ def wait_for_status():
         last = job.status if job is not None else "<no job>"
         raise AssertionError(
             f"job {job_id!r} never reached {statuses} within {timeout}s "
+            f"(last state: {last})"
+        )
+
+    return _wait
+
+
+@pytest.fixture
+def wait_for_scan_status():
+    """Poll the SCAN store until a scan reaches one of the statuses —
+    the twin of wait_for_status for the separate scan store (SCAN_PLAN
+    §4: scan jobs live in their own table, so they get their own waiter)."""
+
+    def _wait(job_id: str, *statuses: str, timeout: float = 5.0):
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            job = scan_jobs.get_job(job_id)
+            if job is not None and job.status in statuses:
+                return job
+            time.sleep(0.01)
+        job = scan_jobs.get_job(job_id)
+        last = job.status if job is not None else "<no job>"
+        raise AssertionError(
+            f"scan {job_id!r} never reached {statuses} within {timeout}s "
             f"(last state: {last})"
         )
 

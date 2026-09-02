@@ -37,6 +37,10 @@ def _get(name: str, default: str) -> str:
 # Where uploaded PDFs are stored temporarily (SOURCE_OF_TRUTH Section 10)
 UPLOAD_DIR = BASE_DIR / "uploads"
 
+# Where finished scans wait for the phone to download them (SCAN_PLAN §5).
+# Same hygiene model as uploads/: server-generated names, startup sweep.
+DOWNLOAD_DIR = BASE_DIR / "downloads"
+
 # Section 8: cap upload size so a huge/malicious file can't hurt us
 MAX_UPLOAD_MB = int(_get("MAX_UPLOAD_MB", "25"))
 
@@ -86,3 +90,14 @@ CONVERT_TIMEOUT_S = int(_get("CONVERT_TIMEOUT_S", "120"))
 # path. Default lives under logs/ (git-ignored). Delete the file to reset
 # job history.
 JOB_DB_PATH = _get("JOB_DB_PATH", str(BASE_DIR / "logs" / "jobs.sqlite3"))
+
+# ------------------------------------------------------------------
+# Scan settings (docs/SCAN_PLAN.md).
+# ------------------------------------------------------------------
+
+# Scanning (via Windows' WIA) is optional and additive: it is offered only
+# when this flag is on AND Windows actually reports a scanner (SCAN_PLAN
+# §3.4). Mirrors ENABLE_OFFICE: 0 turns the feature off without unplugging
+# anything, and a scanner-less machine simply never offers it at all —
+# printing is unaffected either way.
+ENABLE_SCAN = _get("ENABLE_SCAN", "1").strip().lower() not in ("0", "false", "no")

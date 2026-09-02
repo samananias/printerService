@@ -134,6 +134,43 @@ PAGE = """<!DOCTYPE html>
       </select>
     </label>
   </details>
+
+  <!-- Scan section (docs/SCAN_PLAN.md §6/Phase 3): the JS below renders
+       this ONLY when GET /scanners reports a scanner. On a scanner-less
+       setup it stays hidden and the page is exactly the print-only one. -->
+  <div id="scanSection" style="display:none; margin-top:14px;">
+    <p class="sub" style="margin-bottom:8px;">
+      📇 Scanner detected: <span id="scanName"></span>
+    </p>
+    <button id="scanBtn" onclick="startScan()">Scan</button>
+    <details style="margin-top:10px;">
+      <summary style="cursor:pointer; font-size:.85rem; color:#667;">
+        Scan options
+      </summary>
+      <label class="opt">Resolution
+        <select id="scanDpi">
+          <option value="150">150 dpi (faster)</option>
+          <option value="200" selected>200 dpi</option>
+          <option value="300">300 dpi (slower)</option>
+        </select>
+      </label>
+      <label class="opt">Color
+        <select id="scanColorMode">
+          <option value="color" selected>Color</option>
+          <option value="greyscale">Greyscale</option>
+        </select>
+      </label>
+      <label class="opt">Format
+        <select id="scanFormat">
+          <option value="pdf" selected>PDF (document)</option>
+          <option value="png">PNG (image)</option>
+          <option value="jpeg">JPEG (image)</option>
+        </select>
+      </label>
+    </details>
+    <div id="scanResult" style="margin-top:10px; font-size:.92rem;
+         white-space:pre-wrap; word-break:break-word;"></div>
+  </div>
 </div>
 
 <script>
@@ -279,6 +316,126 @@ async function poll(jobId, attempt) {
   } catch (networkError) {
     // One dropped poll shouldn't end monitoring — keep trying.
     setTimeout(() => poll(jobId, attempt + 1), 3000);
+  }
+}
+
+// Scan feature (docs/SCAN_PLAN.md §6/Phase 3): ask the server ONCE whether
+// this printer setup can scan at all. No scanner (or the feature disabled)
+// → the section never renders and the page stays the familiar print-only
+// one. Detection failure must never break the page, hence the catch.
+(async function checkScanner() {
+  try {
+    const response = await fetch("/scanners");
+    if (!response.ok) { return; }
+    const info = await response.json();
+    if (!info.available || !info.devices.length) { return; }
+    document.getElementById("scanName").textContent =
+      info.devices[0].name || "scanner";
+    document.getElementById("scanSection").style.display = "block";
+  } catch (e) {
+    // Stay print-only (SCAN_PLAN §3: detection is never load-bearing).
+  }
+})();
+
+// The Scan button: POST /scan, then poll the job the same way print does.
+// The button stays disabled while a scan is in flight — the flatbed can
+// only do one page at a time, so a second tap would just hit a busy
+// scanner (WIA_ERROR_BUSY) instead of queueing usefully.
+const scanBtn = document.getElementById("scanBtn");
+const scanResult = document.getElementById("scanResult");
+let scanInFlight = false;
+
+function scanShow(text, cls) {
+  scanResult.textContent = text;
+  scanResult.className = cls || "";
+}
+
+async function startScan() {
+  if (scanInFlight) { return; }
+  scanInFlight = true;
+  scanBtn.disabled = true;
+  scanShow("📨 Starting scan…", "ok");
+  const pin = document.getElementById("pin").value.trim();
+  const headers = pin ? { "X-API-PIN": pin } : {};
+  // Scan options (Phase 4): DPI, color mode, output format — strictly
+  // allowlisted server-side; the selects only ever offer valid values.
+  const body = new FormData();
+  body.append("dpi", document.getElementById("scanDpi").value);
+  body.append("color_mode", document.getElementById("scanColorMode").value);
+  body.append("format", document.getElementById("scanFormat").value);
+  try {
+    const response = await fetch("/scan", { method: "POST", headers, body });
+    const data = await response.json();
+    if (response.ok) {
+      scanShow("📨 Scan queued — the flatbed is working. Checking status…", "ok");
+      pollScan(data.job_id, 0);
+    } else if (response.status === 401) {
+      scanInFlight = false;
+      scanBtn.disabled = false;
+      scanShow("❌ Wrong PIN.", "err");
+    } else {
+      scanInFlight = false;
+      scanBtn.disabled = false;
+      scanShow("❌ Server said: " + (data.detail || response.status), "err");
+    }
+  } catch (networkError) {
+    scanInFlight = false;
+    scanBtn.disabled = false;
+    scanShow("❌ Could not reach the server. Are you on the same Wi-Fi?", "err");
+  }
+}
+
+// Poll a scan job until it's done — mirrors print's poll() (SCAN_PLAN §6
+// is explicit: reuse the existing polling pattern, don't invent a new one).
+async function pollScan(jobId, attempt) {
+  if (attempt > 75) {  // ~2.5 min; scans take 40-60 s (spike S2) + print load
+    scanInFlight = false;
+    scanBtn.disabled = false;
+    scanShow("⏳ Still not confirmed after ~2.5 min. Check /scan/jobs/" + jobId +
+             " for the current status.", "ok");
+    return;
+  }
+  try {
+    const pin = document.getElementById("pin").value.trim();
+    const headers = pin ? { "X-API-PIN": pin } : {};
+    const response = await fetch("/scan/jobs/" + jobId, { headers });
+    if (!response.ok) {
+      scanInFlight = false;
+      scanBtn.disabled = false;
+      scanShow("❌ Lost track of scan job " + jobId + " (HTTP " +
+               response.status + ")", "err");
+      return;
+    }
+    const job = await response.json();
+    if (job.status === "done") {
+      scanInFlight = false;
+      scanBtn.disabled = false;
+      // The link is built from the server-issued job id (a UUID hex) —
+      // nothing from the server goes into innerHTML, and the download
+      // endpoint is the only thing it ever points at.
+      scanResult.className = "ok";
+      scanResult.innerHTML = "✅ Scan ready — " +
+        '<a href="/scan/jobs/' + jobId + '/download">View / Download</a>' +
+        " (job " + jobId + ")";
+      return;
+    }
+    if (job.status === "failed") {
+      scanInFlight = false;
+      scanBtn.disabled = false;
+      scanShow("❌ Scan failed: " + (job.error || "unknown reason"), "err");
+      return;
+    }
+    if (job.status === "cancelled") {
+      scanInFlight = false;
+      scanBtn.disabled = false;
+      scanShow("Scan job " + jobId + " was cancelled.", "err");
+      return;
+    }
+    scanShow("⏳ status: " + job.status, "ok");
+    setTimeout(() => pollScan(jobId, attempt + 1), 2000);
+  } catch (networkError) {
+    // One dropped poll shouldn't end monitoring — keep trying.
+    setTimeout(() => pollScan(jobId, attempt + 1), 3000);
   }
 }
 </script>

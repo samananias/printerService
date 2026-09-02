@@ -379,7 +379,7 @@ printerService/
 ├── tests/                    # pytest suite: unit/ (logic, OS faked) + api/ (via TestClient)
 │   └── conftest.py           # Shared fixtures: fresh job store, temp uploads/, fake win32print
 ├── .github/workflows/ci.yml  # GitHub Actions: ruff + pytest (+ coverage gate) on every push/PR
-├── uploads/                  # Temp storage for incoming PDFs (auto-cleaned)
+├── uploads/                  # Temp storage for incoming files (auto-cleaned; dotfiles like .gitkeep survive the sweep)
 ├── logs/                     # service.log (rotating, ~1 MB × 3)
 ├── requirements.txt          # Runtime packages: fastapi, uvicorn, python-multipart, pywin32
 ├── requirements-dev.txt      # Dev packages: pytest, pytest-cov, httpx, ruff

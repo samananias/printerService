@@ -111,6 +111,27 @@ class TestBuildPrintSettings:
             "paper=letter,fit,2x,collate,2-6,monochrome"
         )
 
+    def test_stored_dict_options_are_accepted(self, monkeypatch):
+        # The pipeline passes the job's STORED options — a plain dict
+        # (api/print.py stores model_dump(); retry passes job.options).
+        # Regression: a truthy defaults dict used to crash build_print_settings
+        # with AttributeError ('dict' object has no attribute 'paper') and
+        # fail EVERY job, options chosen or not.
+        monkeypatch.setattr(windows, "PAPER_SIZE", "")
+        stored = {"copies": 1, "pages": "", "paper": "", "color_mode": "color"}
+        assert build_print_settings(stored) is None
+
+    def test_stored_dict_options_keep_their_values(self, monkeypatch):
+        monkeypatch.setattr(windows, "PAPER_SIZE", "")
+        stored = {"copies": 2, "pages": "2-6", "paper": "a4", "color_mode": "monochrome"}
+        assert build_print_settings(stored) == (
+            "paper=A4,fit,2x,collate,2-6,monochrome"
+        )
+
+    def test_empty_dict_behaves_like_defaults(self, monkeypatch):
+        monkeypatch.setattr(windows, "PAPER_SIZE", "")
+        assert build_print_settings({}) is None
+
 
 class TestPaperKeyConsistency:
     def test_every_choice_has_a_layout_and_an_engine_token(self):

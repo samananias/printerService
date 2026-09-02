@@ -151,17 +151,27 @@ PAPER_TOKENS = {
 }
 
 
-def build_print_settings(options: PrintOptions | None) -> str | None:
+def build_print_settings(options: PrintOptions | dict | None) -> str | None:
     """The -print-settings value for these options — None when nothing is
     requested, which keeps the no-options command byte-identical to the
     T4-proven one.
+
+    `options` arrives as a PrintOptions model from unit callers, but as a
+    plain dict from the pipeline (the job's stored print-options JSON —
+    api/print.py stores `model_dump()`, retry passes `job.options`), so
+    dicts are validated back into the model here. Unknown/extra keys are
+    ignored by Pydantic's default config, which also makes this tolerant
+    of older job rows written by earlier versions.
 
     Precedence: the request's paper beats the PAPER_SIZE config; "fit"
     rides along only when a paper size is named (it prevents clipping when
     page and paper disagree) — copies/pages/monochrome alone must not
     rescale a document that would have printed 1:1.
     """
-    options = options or PrintOptions()
+    if options is None:
+        options = PrintOptions()
+    elif isinstance(options, dict):
+        options = PrintOptions.model_validate(options)
     tokens: list[str] = []
 
     paper = (options.paper or PAPER_SIZE).strip().lower()
@@ -224,7 +234,7 @@ def cancel_spooler_jobs(printer_name: str, job_id: str) -> int:
 def submit_pdf(
     pdf_path: Path,
     printer_name: str | None = None,
-    options: PrintOptions | None = None,
+    options: PrintOptions | dict | None = None,
 ) -> tuple[str, str]:
     """Print a PDF file. Returns (method_used, printer_name).
 
