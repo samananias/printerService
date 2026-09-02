@@ -7,6 +7,7 @@ count as scanners. Same fake-module pattern as test_printer_windows.py.
 """
 
 import sys
+import types
 
 from app.scanner import windows as scanner_windows
 
@@ -87,3 +88,25 @@ class TestAvailability:
     ):
         monkeypatch.setattr(scanner_windows, "ENABLE_SCAN", True)
         assert scanner_windows.scanning_supported() is False
+
+
+class TestComApartment:
+    def test_com_is_initialized_on_the_calling_thread(
+        self, fake_win32com, monkeypatch
+    ):
+        # Regression for the live smile-check failure: WIA runs on uvicorn
+        # threadpool / background threads, which need their own
+        # CoInitialize — the main thread's apartment doesn't help them.
+        calls = []
+        monkeypatch.setitem(
+            sys.modules,
+            "pythoncom",
+            types.SimpleNamespace(
+                CoInitialize=lambda: calls.append("init"),
+                CoUninitialize=lambda: calls.append("uninit"),
+            ),
+        )
+        fake_win32com.add_device()
+
+        assert scanner_windows.list_scan_devices()  # the fake WIA ran fine
+        assert calls == ["init", "uninit"]  # initialized AND balanced

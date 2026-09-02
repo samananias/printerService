@@ -1,10 +1,10 @@
 # Scan Feature — Feasibility, Decision Record & Roadmap
 
 Status: **approved plan, compatibility-reviewed (§0); Phase 0 COMPLETE —
-S1/S2/S3/S4 all PASS on the real L3210 (2026-09-01), including the
-unplugged clean-degradation proof. Phase 1 (detection) and Phase 2
-(basic scan pipeline: POST /scan + status/download/cancel + downloads/)
-LANDED. Next: Phase 3 (web UI). Branch `scan-feature`.**
+S1/S2/S3/S4 all PASS on the real L3210 (2026-09-01). Phases 1–2 LANDED,
+plus the per-thread COM fix (2026-09-02) caught by the live smoke-check
+(CoInitialize on background threads; proxies die before CoUninitialize).
+Next: Phase 3 (web UI). Branch `scan-feature`.**
 Goal: add an optional **scan** capability (Android → Python service →
 Windows → USB → printer's scanner glass → back to phone) to the existing
 print service, **without ever affecting printing** on a printer that has
@@ -377,7 +377,21 @@ when disabled/scanner-less), `GET /scan/jobs/{id}` (carries
 router mount. Tests: 14 scan-store/downloads unit tests, 9 pipeline tests
 (fakes with in-flight gates: COM-error translation, vanished scanner,
 corrupt-image wrap failure, cancel-mid-transfer discard), 15 API tests.
-Suite: 323 tests, 96.0 % coverage, ruff clean. Print code untouched.
+Suite: 324 tests (incl. the per-thread COM regression test), 95.8 %
+coverage, ruff clean. Print code untouched.
+
+**Fixed post-smile-check (2026-09-02):** WIA ran on the app's
+*background* threads (uvicorn's pool + the scan thread), and COM
+apartments are per-thread. Live `/scan` failed with
+`CO_E_NOTINITIALIZED` (and `/scanners` was silently reporting
+scanner-less). Fix: `_com_apartment()` — `pythoncom.CoInitialize` /
+`CoUninitialize` around every WIA call (no-op without pywin32, so CI
+unchanged), and a second live-caught bug while fixing that: COM proxies
+must not outlive the thread's `CoUninitialize` (segfault + IUnknown
+release exceptions) → the whole WIA session now lives in a helper whose
+frame dies inside the apartment, so only plain data escapes. Verified
+live: `/scanners` through a real uvicorn reports the L3210, and
+thread-context enumeration is warning-free.
 
 ### Phase 3 — web UI polish
 

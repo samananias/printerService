@@ -21,6 +21,7 @@ S1 plugged AND unplugged):
 """
 
 import logging
+from contextlib import contextmanager
 from pathlib import Path
 
 from app.config import ENABLE_SCAN
@@ -32,21 +33,62 @@ logger = logging.getLogger(__name__)
 WIA_SCANNER_TYPE = 1
 
 
-def list_scan_devices() -> list[ScanDevice]:
-    """Ask Windows which scanners exist right now. NEVER raises."""
-    try:
-        import win32com.client
+@contextmanager
+def _com_apartment():
+    """COM apartments are per-THREAD: every thread that touches WIA must
+    call CoInitialize first, or COM raises CO_E_NOTINITIALIZED
+    (-2147221008 — caught live by the Phase 2 smile-check).
 
-        manager = win32com.client.Dispatch("WIA.DeviceManager")
-        infos = manager.DeviceInfos
-        count = infos.Count
+    The scan endpoints run on uvicorn's thread-pool threads and the scan
+    pipeline on its own background thread — neither is the main thread,
+    where importing pywin32 happened to initialize COM. The spike never
+    saw this because it called WIA from the main thread.
+
+    Balanced Initialize/Uninitialize around the WIA work. On machines
+    without pywin32 (the CI runner) there is no COM at all — yield
+    unchanged, so the faked detection/scan tests behave identically.
+    """
+    try:
+        import pythoncom
+    except ImportError:
+        yield
+        return
+    pythoncom.CoInitialize()
+    try:
+        yield
+    finally:
+        pythoncom.CoUninitialize()
+
+
+def list_scan_devices() -> list[ScanDevice]:
+    """Ask Windows which scanners exist right now. NEVER raises.
+
+    COM apartments are per-thread AND a COM proxy must not outlive its
+    thread's apartment — _detect_scanners_via_com() does the whole session
+    and returns plain data, so its frame (and every COM local) is
+    destroyed BEFORE the _com_apartment() block exits and uninitializes
+    the thread. Both mistakes were caught live in the Phase 2
+    smile-check: skipping CoInitialize gave CO_E_NOTINITIALIZED, and
+    letting proxies outlive CoUninitialize segfaulted.
+    """
+    try:
+        with _com_apartment():
+            return _detect_scanners_via_com()
     except Exception as exc:
         # Missing pywin32, WIA service disabled, COM blow-up: all mean the
         # same thing to this feature — "no scanner on this machine".
         logger.warning("WIA scanner detection unavailable: %s", exc)
         return []
 
+
+def _detect_scanners_via_com() -> list[ScanDevice]:
+    """The WIA enumeration session (call inside _com_apartment)."""
+    import win32com.client
+
     devices: list[ScanDevice] = []
+    manager = win32com.client.Dispatch("WIA.DeviceManager")
+    infos = manager.DeviceInfos
+    count = infos.Count
     for index in range(1, count + 1):  # WIA collections are 1-based
         try:
             info = infos.Item(index)
@@ -156,13 +198,32 @@ def _item_label(item) -> str:
     return ""
 
 
-def _open_flatbed_item():
-    """Connect to the first WIA scanner and return a transferable item.
+def scan_flatbed(dest: Path) -> Path:
+    """Transfer one flatbed page to a PNG at `dest` (SCAN_PLAN §5 step 3).
 
-    Prefers an item whose name mentions "flat" (matters on multi-item
-    devices with a feeder); on the L3210 there is exactly one item and it
-    IS the flatbed (proven by spike S2).
+    Driver-default resolution and color — the user-facing options (dpi,
+    color_mode, format) arrive in Phase 4. The PNG lands ONLY if the
+    transfer succeeded: WIA's SaveFile refuses to overwrite (spike S4's
+    0x80070050 lesson), so the caller must pass a fresh server-generated
+    name — which every caller here does.
+
+    May raise RuntimeError with a phone-readable message (the scan
+    pipeline records it as the job's error); the _com_apartment wrapper
+    keeps every COM proxy inside the session, so nothing outlives the
+    thread's CoUninitialize (see list_scan_devices).
     """
+    try:
+        with _com_apartment():
+            _transfer_flatbed_via_com(dest)
+    except RuntimeError:
+        raise  # already human-readable ("scanner was not found", ...)
+    except Exception as exc:
+        raise RuntimeError(_human_scan_error(exc)) from exc
+    return dest
+
+
+def _transfer_flatbed_via_com(dest: Path) -> None:
+    """One flatbed WIA transfer session (call inside _com_apartment)."""
     import win32com.client
 
     manager = win32com.client.Dispatch("WIA.DeviceManager")
@@ -177,28 +238,10 @@ def _open_flatbed_item():
             range(1, items.Count + 1),
             key=lambda i: "flat" not in _item_label(items.Item(i)).lower(),
         )
-        return items.Item(order[0])
+        item = items.Item(order[0])
+        image = item.Transfer(WIA_FORMAT_PNG)
+        image.SaveFile(str(dest))
+        return
     raise RuntimeError(
         "The scanner was not found — check the USB connection and try again."
     )
-
-
-def scan_flatbed(dest: Path) -> Path:
-    """Transfer one flatbed page to a PNG at `dest` (SCAN_PLAN §5 step 3).
-
-    Driver-default resolution and color — the user-facing options (dpi,
-    color_mode, format) arrive in Phase 4. The PNG lands ONLY if the
-    transfer succeeded: WIA's SaveFile refuses to overwrite (spike S4's
-    0x80070050 lesson), so the caller must pass a fresh server-generated
-    name — which every caller here does.
-    """
-    try:
-
-        item = _open_flatbed_item()
-        image = item.Transfer(WIA_FORMAT_PNG)
-        image.SaveFile(str(dest))
-    except RuntimeError:
-        raise  # already human-readable ("scanner was not found", ...)
-    except Exception as exc:
-        raise RuntimeError(_human_scan_error(exc)) from exc
-    return dest
