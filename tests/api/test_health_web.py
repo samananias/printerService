@@ -77,3 +77,29 @@ class TestScanWebUi:
         assert 'getElementById("scanDpi")' in page
         assert 'getElementById("scanFormat")' in page
 
+
+class TestNotebookRedesign:
+    """WEBDESIGN_PLAN revision 2 (the exercise-book page): a Jobs list,
+    emoji-free copy, and the self-hosted assets inlined at import."""
+
+    def test_page_has_the_jobs_list(self, client):
+        page = client.get("/").text
+        assert 'id="jobList"' in page            # entries written on the rules
+        assert 'id="jobsWorking"' in page        # the pencil, shown while active
+        assert 'fetch("/jobs")' in page          # GET /jobs drives the list
+        assert "cancelJob" in page               # DELETE for active jobs
+
+    def test_page_uses_no_emoji(self, client):
+        # Hard rule (brief §4): status is icon + exact word, never emoji.
+        page = client.get("/").text
+        for emoji in ["📨", "❌", "⏳", "✅", "🔁", "📇", "🖨", "📄"]:
+            assert emoji not in page
+
+    def test_assets_are_inlined_and_self_hosted(self, client):
+        page = client.get("/").text
+        assert "data:font/woff2;base64," in page  # Patrick Hand inlined
+        assert "fonts.googleapis" not in page     # zero CDN calls at runtime
+        assert '<symbol id="i-printer"' in page   # Phosphor sprite assembled
+        assert '<symbol id="i-pencil"' in page    # the signature element
+
+
