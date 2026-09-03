@@ -14,16 +14,34 @@ colors:
   red-pen: "#C0392B"
 typography:
   display:
-    fontFamily: "\"Patrick Hand\", \"Segoe Print\", \"Comic Sans MS\", cursive"
+    fontFamily: "'Patrick Hand', 'Segoe Print', 'Comic Sans MS', cursive"
     fontSize: "24px"
     fontWeight: 400
     lineHeight: "32px"
     letterSpacing: "normal"
   heading:
-    fontFamily: "\"Patrick Hand\", \"Segoe Print\", \"Comic Sans MS\", cursive"
+    fontFamily: "'Patrick Hand', 'Segoe Print', 'Comic Sans MS', cursive"
     fontSize: "19px"
     fontWeight: 400
     lineHeight: "32px"
+    letterSpacing: "normal"
+  status:
+    fontFamily: "'Patrick Hand', 'Segoe Print', 'Comic Sans MS', cursive"
+    fontSize: "16.5px"
+    fontWeight: 400
+    lineHeight: "24px"
+    letterSpacing: "normal"
+  nav:
+    fontFamily: "'Patrick Hand', 'Segoe Print', 'Comic Sans MS', cursive"
+    fontSize: "17px"
+    fontWeight: 400
+    lineHeight: "24px"
+    letterSpacing: "normal"
+  small-hand:
+    fontFamily: "'Patrick Hand', 'Segoe Print', 'Comic Sans MS', cursive"
+    fontSize: "16px"
+    fontWeight: 400
+    lineHeight: "22px"
     letterSpacing: "normal"
   body:
     fontFamily: "system-ui, sans-serif"
@@ -41,6 +59,7 @@ rounded:
   box: "12px 14px 12px 14px / 14px 12px 14px 12px"
   field: "8px"
   pick: "10px 12px 10px 12px / 12px 10px 12px 10px"
+  focus: "4px"
 spacing:
   xs: "8px"
   sm: "12px"
@@ -129,10 +148,11 @@ text colors. The decorative trio never carries text.
 Three voices, one job each:
 
 - **Handwriting** — self-hosted Patrick Hand (OFL, inlined as a base64
-  woff2; fallback `"Segoe Print", "Comic Sans MS", cursive`). Page title
-  (24px), section headings (19px, sitting on a 2px `rule-strong`
-  underline), button labels (19px), status words (16.5px), empty-state
-  notes. Never for error detail, helper copy, URLs, or copyable numbers.
+  woff2; fallback `"Segoe Print", "Comic Sans MS", cursive`). Four steps:
+  page title 24px, section headings 19px (sitting on a 2px `rule-strong`
+  underline), button labels 19px, status words 16.5px, header nav buttons
+  17px, options summaries / empty-state notes 16px. Never for error detail,
+  helper copy, URLs, or copyable numbers.
 - **Body** — system-ui 14px/1.5 in `graphite` for helper and error text.
 - **Mono** — ui-monospace 12.5px in `graphite`, only for
   machine-generated values (job IDs, timestamps, DPI, error codes).
@@ -144,14 +164,19 @@ in the body face. Handwriting carries labels and single words only.
 
 Mobile-first; the 390px viewport is the primary surface.
 
-- Header zone: plain paper (no rules behind it), title left, wifi health
-  icon right (24px, `cyan-wet` when reachable, `red-pen` when not).
+- The app is **two pages of the same sheet**: `/` (print) and `/scan`
+  (scan). Header zone: plain paper (no rules behind it), title left; on
+  the right sit the always-visible drawn-box nav button (Scan in
+  `cyan-wet` on the print page, Print in `ink-blue` on the scan page) and
+  the wifi health icon (24px, `cyan-wet` reachable / `red-pen` not).
 - The sheet starts below the header: red margin line at 52px, ruled lines
   every 32px, content begins at 64px.
 - Jobs: one entry per ruled line (two when error text wraps) — a 52px
   margin column for the state mark, then icon + filename + mono id +
   status word written inline. Entries are never boxed or carded; the
-  ruled page is the container.
+  ruled page is the container. Print page only.
+- Scan page: same sheet, same geometry; the scan form's controls stay
+  hidden behind a single calm status line until a scanner is detected.
 - Desktop (≥768px): same sheet widened to 8vw side margins, margin column
   72px, rule pitch 36px, print/scan actions max-width 560px, jobs flow in
   two columns.
@@ -179,9 +204,11 @@ elevation tokens. Controls distinguish themselves with borders and the
 
 ## Components
 
-- **Action button** (Print / Scan / Retry): hand-drawn box, handwriting
-  label + trailing 20px icon, 48px min height. Scan's box draws in
-  `cyan-wet`; disabled = 0.4 opacity; pressed = 7% ink tint fill.
+- **Action button** (Print / Scan / nav hand-off): hand-drawn box,
+  handwriting label + trailing 20px icon, 48px min height (44px for the
+  small nav variant). Scan's box draws in `cyan-wet`; the header nav
+  hand-off uses the target page's action color. Disabled = 0.4 opacity;
+  pressed = 7% ink tint fill.
 - **File picker**: dashed `rule-strong` border on `paper-raised`, upload
   icon + truncated filename, 44px min height.
 - **Job entry**: margin mark (state icon in pen color) + written line

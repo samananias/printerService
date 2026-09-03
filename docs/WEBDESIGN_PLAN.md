@@ -279,24 +279,45 @@ alone):
 ## 6. Layout & responsiveness
 
 **Mobile first, literally** — design the 390px layout, then add
-breakpoints. The page is **one continuous sheet**, not stacked cards:
+breakpoints. The app is **two pages of the same sheet**: `/` (print) and
+`/scan` (scan), each written on the same ruled rules, each reachable from
+the other by an always-visible nav box in the header (Scan on the print
+page, Print on the scan page). The scan page degrades to one calm status
+line until a scanner is actually detected; the print page carries no scan
+UI at all.
 
 ```
-MOBILE (base, ~375–430px)
+MOBILE (base, ~375–430px) — PRINT PAGE (/)
 ┌──┬──────────────────────────┐
-│  │ printerService  [wifi]   │ ← header zone: plain paper, no rules;
-│  │                          │   handwriting title, health icon right
+│  │ printerService  [Scan] [wifi] │ ← header: handwriting title, the
+│  │                          │   always-visible Scan nav box, health
 ├──┼──────────────────────────┤ ← red margin line starts here
 │▍ │ Print            [printer] │ ← action rows written ON the rules,
-│▍ │ Scan             [scan]    │   not boxed cards; a --rule-strong
-│▍ │                           │   line separates sections like a new
-│▍ │ Options [sliders] ▾       │   exercise; options collapsed by default
-│▍ │ Jobs                      │
+│▍ │                           │   not boxed cards; a --rule-strong
+│▍ │ Options [sliders] ▾       │   line separates sections like a new
+│▍ │ Jobs                      │   exercise; options collapsed by default
 │ ✓│ check-circle done  #a1b2 [dl] │ ← margin column (left of the red
 │▍ │ (next entry)               │   line) holds the annotation only;
 │ ✗│ x-circle failed   #9f3c    │   entries are written right of it
 └──┴──────────────────────────┘
+
+MOBILE — SCAN PAGE (/scan, same sheet)
+┌──┬──────────────────────────┐
+│  │ printerService [Print] [wifi] │ ← nav hand-off back to printing
+├──┼──────────────────────────┤
+│▍ │ Scan              [scan]  │ ← the scan form; its options drawer
+│▍ │   Resolution ▾            │   (dpi/color/format) collapsed
+│▍ │   Color ▾                 │   until opened; the "no scanner"
+│▍ │   Format ▾                │   line replaces all of this when
+│▍ │                           │   the hardware isn't there
+└──┴──────────────────────────┘
 ```
+
+- **The nav hand-off.** The header carries one small drawn-box nav button
+  pointing at the other page: **Scan** (`--cyan-wet`) on the print page,
+  **Print** (`--ink-blue`) on the scan page. Both stay visible regardless
+  of hardware — a scanner-less setup simply means the scan page shows a
+  single calm status line and no controls.
 
 - **The margin column (~52px, left of the red line)** is where the machine
   marks the page: the state annotation per job (§2's table). It holds only
@@ -454,9 +475,17 @@ MOBILE (base, ~375–430px)
 - **A Jobs list was added** (the brief's §6 Jobs section): `GET /jobs`
   (already served by `app/api/jobs.py`) rendered as entries written on the
   rules — per-state margin marks, format glyphs from `job.format`/
-  filename, and a cancel (DELETE) button on active entries. Scan jobs
-  still report inline in the Scan section (the API has no scan-job list
-  endpoint). Refreshed on load, on job events, and every 5 s.
+  filename, and a cancel (DELETE) button on active entries. Refreshed on
+  load, on job events, and every 5 s.
+- **Scan lives on its own page** at `GET /scan` (owner request: "make it
+  like a different page but still have an accessible button for it"). The
+  print page's header carries an always-visible drawn-box **Scan** nav
+  button (`--cyan-wet`) linking over; the scan page carries a **Print**
+  nav button back. Both pages assemble from the same CSS/JS parts — the
+  scan JS only runs on the scan page (guarded by `#scanSection`'s
+  presence), so the print page keeps no scan code paths. The scan page
+  degrades to one calm status line ("No scanner detected — the printer
+  may be off or unplugged.") until `GET /scanners` reports a scanner.
 - **Pinned hooks kept verbatim** (§0): `>Print<`, `id="printBtn"`,
   `id="scanSection" style="display:none`, `id="scanBtn"`,
   `onclick="startScan()"`, `pollScan`,

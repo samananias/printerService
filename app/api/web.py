@@ -342,18 +342,30 @@ PAGE_CSS3 = """
     .joblist { columns: 2; column-gap: 30px; }
     .job { break-inside: avoid; }
   }
+  /* ---- page nav: the always-visible Scan / Print hand-off ---- */
+  .brandlink { display: flex; align-items: center; gap: 9px;
+               text-decoration: none; color: inherit; }
+  .topright { display: flex; align-items: center; gap: 12px; }
+  .btn.nav { min-height: 44px; padding: 6px 16px; font-size: 17px; }
 </style>
 </head>
 <body>
 __ICON_SPRITE__
-<header class="top">
+"""
+PAGE_BODY_HOME = """<header class="top">
   <div class="brand">
     <img src="/favicon.svg" alt="">
     <h1>printerService</h1>
   </div>
-  <span class="ic health" id="health" role="img" aria-label="checking server">
-    <svg aria-hidden="true"><use href="#i-wifi-high"/></svg>
-  </span>
+  <div class="topright">
+    <a class="btn nav scanbtn" href="/scan"
+       aria-label="Go to the scan page">Scan<svg class="btail"
+      aria-hidden="true"><use href="#i-scan"/></svg></a>
+    <span class="ic health" id="health" role="img"
+          aria-label="checking server">
+      <svg aria-hidden="true"><use href="#i-wifi-high"/></svg>
+    </span>
+  </div>
 </header>
 <main class="sheet">
   <section class="act">
@@ -378,7 +390,6 @@ __ICON_SPRITE__
             onclick="retryJob()">Retry failed job<svg class="btail"
       aria-hidden="true"><use href="#i-arrow-clockwise"/></svg></button>
     <div id="result" class="status" role="status"></div>
-<!-- __HTML2__ -->
 """
 PAGE_HTML2 = """    <details class="opts">
       <summary><span class="ic xs" aria-hidden="true"><svg><use
@@ -413,50 +424,6 @@ PAGE_HTML2 = """    <details class="opts">
     </details>
   </section>
 
-  <!-- Scan section (docs/SCAN_PLAN.md §6/Phase 3): the JS below renders
-       this ONLY when GET /scanners reports a scanner. On a scanner-less
-       setup it stays hidden and the page is exactly the print-only one. -->
-  <div id="scanSection" style="display:none;" class="act">
-    <h2 class="rulehead">Scan</h2>
-    <p class="sub">Scanner: <span id="scanName"></span></p>
-    <button id="scanBtn" class="btn scanbtn" onclick="startScan()">Scan<svg
-      class="btail" aria-hidden="true"><use href="#i-scan"/></svg></button>
-    <div class="working" id="scanWorking" hidden aria-hidden="true">
-      <svg viewBox="0 0 150 28" width="132" height="25">
-        <path class="pline" d="M4 19 Q 14 7 24 19 T 44 19 T 64 19 T 84 19 T 104 19 T 124 19"/>
-        <g class="pencilbody"><use href="#i-pencil" x="118" y="2" width="22" height="22"/></g>
-      </svg>
-    </div>
-    <details class="opts">
-      <summary><span class="ic xs" aria-hidden="true"><svg><use
-        href="#i-sliders-horizontal"/></svg></span>Scan options</summary>
-      <label class="opt"><span class="ic xs" aria-hidden="true"><svg><use
-        href="#i-crosshair"/></svg></span>Resolution
-        <select id="scanDpi">
-          <option value="150">150 dpi (faster)</option>
-          <option value="200" selected>200 dpi</option>
-          <option value="300">300 dpi (slower)</option>
-        </select>
-      </label>
-      <label class="opt"><span class="ic xs" aria-hidden="true"><svg><use
-        href="#i-drop"/></svg></span>Color
-        <select id="scanColorMode">
-          <option value="color" selected>Color</option>
-          <option value="greyscale">Greyscale</option>
-        </select>
-      </label>
-      <label class="opt"><span class="ic xs" aria-hidden="true"><svg><use
-        href="#i-file-pdf"/></svg></span>Format
-        <select id="scanFormat">
-          <option value="pdf" selected>PDF (document)</option>
-          <option value="png">PNG (image)</option>
-          <option value="jpeg">JPEG (image)</option>
-        </select>
-      </label>
-    </details>
-    <div id="scanResult" class="status" role="status"></div>
-  </div>
-
   <section class="jobs">
     <div class="jobshead" style="display:flex; align-items:center; gap:14px;">
       <h2 class="rulehead">Jobs</h2>
@@ -472,6 +439,79 @@ PAGE_HTML2 = """    <details class="opts">
   </section>
 </main>
 """
+PAGE_BODY_SCAN = """<header class="top">
+  <div class="brand">
+    <a class="brandlink" href="/" aria-label="Back to the print page">
+      <img src="/favicon.svg" alt="">
+      <h1>printerService</h1>
+    </a>
+  </div>
+  <div class="topright">
+    <a class="btn nav" href="/" aria-label="Back to the print page">Print<svg
+      class="btail" aria-hidden="true"><use href="#i-printer"/></svg></a>
+    <span class="ic health" id="health" role="img"
+          aria-label="checking server">
+      <svg aria-hidden="true"><use href="#i-wifi-high"/></svg>
+    </span>
+  </div>
+</header>
+<main class="sheet">
+  <!-- The scan page (owner request: scan lives on its own page, reached
+       from the always-visible Scan button on the print page). The page
+       itself degrades calmly: until GET /scanners reports a scanner, the
+       controls stay hidden and one status line says so. -->
+  <div id="scanSection" class="act">
+    <h2 class="rulehead">Scan</h2>
+    <p class="sub" id="scanStatus">Checking for a scanner…</p>
+    <div id="scanControls" style="display:none;">
+      <p class="sub">Scanner: <span id="scanName"></span></p>
+      <div class="row">
+        <span class="ic xs" style="color:var(--graphite)"
+              aria-hidden="true"><svg><use href="#i-lock-key"/></svg></span>
+        <input type="password" id="pin" autocomplete="off"
+               placeholder="PIN (only if the server set one)">
+      </div>
+      <button id="scanBtn" class="btn scanbtn" onclick="startScan()">Scan<svg
+        class="btail" aria-hidden="true"><use href="#i-scan"/></svg></button>
+      <div class="working" id="scanWorking" hidden aria-hidden="true">
+        <svg viewBox="0 0 150 28" width="132" height="25">
+          <path class="pline" d="M4 19 Q 14 7 24 19 T 44 19 T 64 19 T 84 19 T 104 19 T 124 19"/>
+          <g class="pencilbody"><use href="#i-pencil" x="118" y="2" width="22" height="22"/></g>
+        </svg>
+      </div>
+      <details class="opts">
+        <summary><span class="ic xs" aria-hidden="true"><svg><use
+          href="#i-sliders-horizontal"/></svg></span>Scan options</summary>
+        <label class="opt"><span class="ic xs" aria-hidden="true"><svg><use
+          href="#i-crosshair"/></svg></span>Resolution
+          <select id="scanDpi">
+            <option value="150">150 dpi (faster)</option>
+            <option value="200" selected>200 dpi</option>
+            <option value="300">300 dpi (slower)</option>
+          </select>
+        </label>
+        <label class="opt"><span class="ic xs" aria-hidden="true"><svg><use
+          href="#i-drop"/></svg></span>Color
+          <select id="scanColorMode">
+            <option value="color" selected>Color</option>
+            <option value="greyscale">Greyscale</option>
+          </select>
+        </label>
+        <label class="opt"><span class="ic xs" aria-hidden="true"><svg><use
+          href="#i-file-pdf"/></svg></span>Format
+          <select id="scanFormat">
+            <option value="pdf" selected>PDF (document)</option>
+            <option value="png">PNG (image)</option>
+            <option value="jpeg">JPEG (image)</option>
+          </select>
+        </label>
+      </details>
+    </div>
+    <div id="scanResult" class="status" role="status"></div>
+  </div>
+</main>
+"""
+
 PAGE_JS1 = """
 <script>
 // ---- handles over the redesigned DOM (ids are pinned by tests) ----
@@ -481,7 +521,6 @@ const retryBtn = document.getElementById("retryBtn");
 const jobList = document.getElementById("jobList");
 const jobsEmpty = document.getElementById("jobsEmpty");
 const jobsWorking = document.getElementById("jobsWorking");
-const scanWorking = document.getElementById("scanWorking");
 
 // Client-side convenience only — the server re-checks everything
 // (extension allowlist + magic bytes) and never trusts the browser.
@@ -590,7 +629,6 @@ async function sendPrint() {
     btn.disabled = false;
   }
 }
-/* __JS2__ */
 """
 PAGE_JS2 = r"""
 // Poll the job until it's done or failed — this is the "is my print
@@ -753,128 +791,149 @@ async function cancelJob(jobId) {
   }
   loadJobs();
 }
-/* __JS3__ */
 """
 PAGE_JS3 = """
-// Scan feature (docs/SCAN_PLAN.md §6/Phase 3): ask the server ONCE whether
-// this printer setup can scan at all. No scanner (or the feature disabled)
-// → the section never renders and the page stays the familiar print-only
-// one. Detection failure must never break the page, hence the catch.
-(async function checkScanner() {
-  try {
-    const response = await fetch("/scanners");
-    if (!response.ok) { return; }
-    const info = await response.json();
-    if (!info.available || !info.devices.length) { return; }
-    document.getElementById("scanName").textContent =
-      info.devices[0].name || "scanner";
-    document.getElementById("scanSection").style.display = "block";
-  } catch (e) {
-    // Stay print-only (SCAN_PLAN §3: detection is never load-bearing).
+// ---- Scan page (owner request: scan lives on its own page at GET /scan,
+// reached from the always-visible Scan button on the print page). Everything
+// here exists only on that page — the guard below keeps the print page free
+// of scan code paths. On a scanner-less setup the page degrades to one calm
+// status line; detection failure never breaks anything, hence the catches.
+if (document.getElementById("scanSection")) {
+  const scanBtn = document.getElementById("scanBtn");
+  const scanResult = document.getElementById("scanResult");
+  const scanWorking = document.getElementById("scanWorking");
+  const scanControls = document.getElementById("scanControls");
+  const scanStatus = document.getElementById("scanStatus");
+  let scanInFlight = false;
+
+  function scanShow(text, cls) {
+    scanResult.textContent = text;
+    scanResult.className = "status" + (cls ? " " + cls : "");
   }
-})();
 
-// The Scan button: POST /scan, then poll the job the same way print does.
-// The button stays disabled while a scan is in flight — the flatbed can
-// only do one page at a time, so a second tap would just hit a busy
-// scanner (WIA_ERROR_BUSY) instead of queueing usefully.
-const scanBtn = document.getElementById("scanBtn");
-const scanResult = document.getElementById("scanResult");
-let scanInFlight = false;
+  // Every terminal path of a scan (done/failed/cancelled/lost/timeout) ends
+  // here: release the button and put the pencil away.
+  function scanSettle() {
+    scanInFlight = false;
+    scanBtn.disabled = false;
+    scanWorking.hidden = true;
+  }
 
-function scanShow(text, cls) {
-  scanResult.textContent = text;
-  scanResult.className = "status" + (cls ? " " + cls : "");
-}
-
-// Every terminal path of a scan (done/failed/cancelled/lost/timeout) ends
-// here: release the button and put the pencil away.
-function scanSettle() {
-  scanInFlight = false;
-  scanBtn.disabled = false;
-  scanWorking.hidden = true;
-}
-
-async function startScan() {
-  if (scanInFlight) { return; }
-  scanInFlight = true;
-  scanBtn.disabled = true;
-  scanWorking.hidden = false;
-  scanShow("Starting scan…", "ok");
-  const pin = document.getElementById("pin").value.trim();
-  const headers = pin ? { "X-API-PIN": pin } : {};
-  // Scan options (Phase 4): DPI, color mode, output format — strictly
-  // allowlisted server-side; the selects only ever offer valid values.
-  const body = new FormData();
-  body.append("dpi", document.getElementById("scanDpi").value);
-  body.append("color_mode", document.getElementById("scanColorMode").value);
-  body.append("format", document.getElementById("scanFormat").value);
-  try {
-    const response = await fetch("/scan", { method: "POST", headers, body });
-    const data = await response.json();
-    if (response.ok) {
-      scanShow("queued — the flatbed is working. Checking status…", "ok");
-      pollScan(data.job_id, 0);
-    } else if (response.status === 401) {
-      scanSettle();
-      scanShow("Wrong PIN.", "err");
-    } else {
-      scanSettle();
-      scanShow("Server said: " + (data.detail || response.status), "err");
+  // Ask the server ONCE whether this printer setup can scan at all.
+  // No scanner (or the feature disabled) → controls never appear and one
+  // line explains why; otherwise they're revealed.
+  (async function checkScanner() {
+    try {
+      const response = await fetch("/scanners");
+      if (!response.ok) {
+        scanStatus.textContent = "Could not check for a scanner.";
+        return;
+      }
+      const info = await response.json();
+      if (!info.available || !info.devices.length) {
+        scanStatus.textContent =
+          "No scanner detected — the printer may be off or unplugged.";
+        return;
+      }
+      scanStatus.textContent = "";
+      scanControls.style.display = "block";
+      document.getElementById("scanName").textContent =
+        info.devices[0].name || "scanner";
+    } catch (e) {
+      scanStatus.textContent = "Could not check for a scanner.";
     }
-  } catch (networkError) {
-    scanSettle();
-    scanShow("Could not reach the server. Are you on the same Wi-Fi?", "err");
-  }
-}
+  })();
 
-// Poll a scan job until it's done — mirrors print's poll() (SCAN_PLAN §6
-// is explicit: reuse the existing polling pattern, don't invent a new one).
-async function pollScan(jobId, attempt) {
-  if (attempt > 75) {  // ~2.5 min; scans take 40-60 s (spike S2) + print load
-    scanSettle();
-    scanShow("Still not confirmed after ~2.5 min. Check /scan/jobs/" + jobId +
-             " for the current status.", "ok");
-    return;
-  }
-  try {
+  // The Scan button: POST /scan, then poll the job the same way print does.
+  // The button stays disabled while a scan is in flight — the flatbed can
+  // only do one page at a time, so a second tap would just hit a busy
+  // scanner (WIA_ERROR_BUSY) instead of queueing usefully.
+  async function startScan() {
+    if (scanInFlight) { return; }
+    scanInFlight = true;
+    scanBtn.disabled = true;
+    scanWorking.hidden = false;
+    scanShow("Starting scan…", "ok");
     const pin = document.getElementById("pin").value.trim();
     const headers = pin ? { "X-API-PIN": pin } : {};
-    const response = await fetch("/scan/jobs/" + jobId, { headers });
-    if (!response.ok) {
+    // Scan options (Phase 4): DPI, color mode, output format — strictly
+    // allowlisted server-side; the selects only ever offer valid values.
+    const body = new FormData();
+    body.append("dpi", document.getElementById("scanDpi").value);
+    body.append("color_mode", document.getElementById("scanColorMode").value);
+    body.append("format", document.getElementById("scanFormat").value);
+    try {
+      const response = await fetch("/scan", { method: "POST", headers, body });
+      const data = await response.json();
+      if (response.ok) {
+        scanShow("queued — the flatbed is working. Checking status…", "ok");
+        pollScan(data.job_id, 0);
+      } else if (response.status === 401) {
+        scanSettle();
+        scanShow("Wrong PIN.", "err");
+      } else {
+        scanSettle();
+        scanShow("Server said: " + (data.detail || response.status), "err");
+      }
+    } catch (networkError) {
       scanSettle();
-      scanShow("Lost track of scan job " + jobId + " (HTTP " +
-               response.status + ")", "err");
-      return;
+      scanShow("Could not reach the server. Are you on the same Wi-Fi?", "err");
     }
-    const job = await response.json();
-    if (job.status === "done") {
-      scanSettle();
-      // The link is built from the server-issued job id (a UUID hex) —
-      // nothing from the server goes into innerHTML, and the download
-      // endpoint is the only thing it ever points at.
-      scanResult.className = "status";
-      scanResult.innerHTML = "done — Scan ready: " +
-        '<a href="/scan/jobs/' + jobId + '/download">View / Download</a>' +
-        " (job " + jobId + ")";
-      return;
-    }
-    if (job.status === "failed") {
-      scanSettle();
-      scanShow("failed — " + (job.error || "unknown reason"), "err");
-      return;
-    }
-    if (job.status === "cancelled") {
-      scanSettle();
-      scanShow("cancelled — scan job " + jobId, "err");
-      return;
-    }
-    scanShow("status: " + job.status, "ok");
-    setTimeout(() => pollScan(jobId, attempt + 1), 2000);
-  } catch (networkError) {
-    // One dropped poll shouldn't end monitoring — keep trying.
-    setTimeout(() => pollScan(jobId, attempt + 1), 3000);
   }
+
+  // Poll a scan job until it's done — mirrors print's poll() (SCAN_PLAN §6
+  // is explicit: reuse the existing polling pattern, don't invent a new one).
+  async function pollScan(jobId, attempt) {
+    if (attempt > 75) {  // ~2.5 min; scans take 40-60 s (spike S2) + print load
+      scanSettle();
+      scanShow("Still not confirmed after ~2.5 min. Check /scan/jobs/" + jobId +
+               " for the current status.", "ok");
+      return;
+    }
+    try {
+      const pin = document.getElementById("pin").value.trim();
+      const headers = pin ? { "X-API-PIN": pin } : {};
+      const response = await fetch("/scan/jobs/" + jobId, { headers });
+      if (!response.ok) {
+        scanSettle();
+        scanShow("Lost track of scan job " + jobId + " (HTTP " +
+                 response.status + ")", "err");
+        return;
+      }
+      const job = await response.json();
+      if (job.status === "done") {
+        scanSettle();
+        // The link is built from the server-issued job id (a UUID hex) —
+        // nothing from the server goes into innerHTML, and the download
+        // endpoint is the only thing it ever points at.
+        scanResult.className = "status";
+        scanResult.innerHTML = "done — Scan ready: " +
+          '<a href="/scan/jobs/' + jobId + '/download">View / Download</a>' +
+          " (job " + jobId + ")";
+        return;
+      }
+      if (job.status === "failed") {
+        scanSettle();
+        scanShow("failed — " + (job.error || "unknown reason"), "err");
+        return;
+      }
+      if (job.status === "cancelled") {
+        scanSettle();
+        scanShow("cancelled — scan job " + jobId, "err");
+        return;
+      }
+      scanShow("status: " + job.status, "ok");
+      setTimeout(() => pollScan(jobId, attempt + 1), 2000);
+    } catch (networkError) {
+      // One dropped poll shouldn't end monitoring — keep trying.
+      setTimeout(() => pollScan(jobId, attempt + 1), 3000);
+    }
+  }
+
+  // Inline onclick handlers resolve against window — expose the two
+  // functions the scan page's HTML references ("startScan()", pollScan).
+  window.startScan = startScan;
+  window.pollScan = pollScan;
 }
 
 // ---- server health: the header wifi icon is the reachability check ----
@@ -896,34 +955,56 @@ async function checkHealth() {
 }
 
 // ---- file picker label + startup ----
-document.getElementById("file").addEventListener("change", function () {
-  const picked = this.files[0];
-  document.getElementById("pickName").textContent =
-    picked ? picked.name : "Choose a PDF, image, Office, or text file…";
-});
+const fileInput = document.getElementById("file");
+if (fileInput) {
+  fileInput.addEventListener("change", function () {
+    const picked = this.files[0];
+    document.getElementById("pickName").textContent =
+      picked ? picked.name : "Choose a PDF, image, Office, or text file…";
+  });
+}
 
-checkHealth();
-loadJobs();
-setInterval(loadJobs, 5000);       // cheap on a LAN; keeps the sheet fresh
+checkHealth();   // the header wifi icon exists on both pages
+if (document.getElementById("jobList")) {   // the print page only
+  loadJobs();
+  setInterval(loadJobs, 5000);  // cheap on a LAN; keeps the sheet fresh
+}
 setInterval(checkHealth, 30000);
 </script>
 </body>
 </html>"""
-# The page is assembled once at import: asset placeholders become the
+# The two pages are assembled once at import: asset placeholders become the
 # inlined font and the icon sprite (both degrading to nothing if the
 # committed files are missing).
 PAGE = (
-    PAGE_CSS1 + PAGE_CSS2 + PAGE_CSS3 + PAGE_HTML2 + PAGE_JS1
-    + PAGE_JS2 + PAGE_JS3
+    PAGE_CSS1 + PAGE_CSS2 + PAGE_CSS3 + PAGE_BODY_HOME + PAGE_HTML2
+    + PAGE_JS1 + PAGE_JS2 + PAGE_JS3
 )
-PAGE = PAGE.replace("__FONT_DATA_URI__", _font_data_uri())
-PAGE = PAGE.replace("__ICON_SPRITE__", _icon_sprite())
+SCAN_PAGE = (
+    PAGE_CSS1 + PAGE_CSS2 + PAGE_CSS3 + PAGE_BODY_SCAN
+    + PAGE_JS1 + PAGE_JS2 + PAGE_JS3
+)
+for _page_name, _page in (("PAGE", PAGE), ("SCAN_PAGE", SCAN_PAGE)):
+    _page = _page.replace("__FONT_DATA_URI__", _font_data_uri())
+    _page = _page.replace("__ICON_SPRITE__", _icon_sprite())
+    if _page_name == "PAGE":
+        PAGE = _page
+    else:
+        SCAN_PAGE = _page
 
 
 @router.get("/", response_class=HTMLResponse)
 def index():
     """Serve the upload page. Opening the server's URL on the phone IS the app."""
     return PAGE
+
+
+@router.get("/scan", response_class=HTMLResponse)
+def scan_page():
+    """Serve the scan page — the print page's counterpart, reached from the
+    always-visible Scan button on /. Same sheet, same rules; the page degrades
+    to a calm 'no scanner' line when the hardware isn't there."""
+    return SCAN_PAGE
 
 
 @router.get("/favicon.svg", include_in_schema=False)

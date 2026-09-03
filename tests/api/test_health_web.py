@@ -47,35 +47,61 @@ class TestWebPage:
 
 
 class TestScanWebUi:
-    """Phase 3 (docs/SCAN_PLAN.md §6/§8): the page ships the Scan UI even
-    though it only *renders* it when /scanners reports a scanner — the
-    same way the print form is always in the HTML."""
+    """Scan moved to its own page at GET /scan (owner request: separate page,
+    always-reachable). The print page keeps one always-visible Scan nav button
+    that hands off; the scan page itself degrades to a calm message when no
+    scanner exists — it never errors, never breaks the print page."""
 
-    def test_page_includes_the_scan_button_and_flow(self, client):
+    def test_print_page_has_the_scan_handoff(self, client):
         page = client.get("/").text
-        assert 'id="scanSection"' in page            # hidden until a scanner
-        assert 'id="scanBtn"' in page                 # the real button
+        assert 'href="/scan"' in page          # the always-visible nav button
+        assert '>Scan<' in page
+        assert 'id="printBtn"' in page         # printing stays first
+
+    def test_print_page_has_no_scan_ui(self, client):
+        # The scan form lived on the print page before; now it's gone from it.
+        page = client.get("/").text
+        assert 'id="scanSection"' not in page
+        assert 'id="scanBtn"' not in page
+
+    def test_scan_page_serves_html(self, client):
+        response = client.get("/scan")
+        assert response.status_code == 200
+        assert "text/html" in response.headers["content-type"]
+
+    def test_scan_page_includes_the_scan_ui_and_flow(self, client):
+        page = client.get("/scan").text
+        assert 'id="scanSection"' in page
+        assert 'id="scanBtn"' in page             # the real button
         assert 'onclick="startScan()"' in page
-        assert 'fetch("/scan"' in page or 'fetch("/scan")' in page
-        assert "/scan/jobs/" in page                  # poll + download link
+        assert 'fetch("/scan")' in page or 'fetch("/scan"' in page
+        assert "/scan/jobs/" in page              # poll + download link
         assert "pollScan" in page
         assert "startScan" in page
+        # And a way back to printing.
+        assert 'href="/"' in page
 
-    def test_page_is_still_print_first(self, client):
-        page = client.get("/").text
-        # The scan section is display:none by default — printing stays the
-        # first thing on the page (SCAN_PLAN §1 answer 5).
-        assert 'id="scanSection" style="display:none' in page
-        assert 'id="printBtn"' in page
+    def test_scan_page_has_nav_back_to_print(self, client):
+        page = client.get("/scan").text
+        assert '>Print<' in page
+        assert 'aria-label="Back to the print page"' in page
 
-    def test_page_includes_the_scan_options(self, client):
+    def test_scan_page_includes_the_scan_options(self, client):
         # Phase 4: DPI / color / format selects, read by startScan.
-        page = client.get("/").text
+        page = client.get("/scan").text
         assert 'id="scanDpi"' in page
         assert 'id="scanColorMode"' in page
         assert 'id="scanFormat"' in page
         assert 'getElementById("scanDpi")' in page
         assert 'getElementById("scanFormat")' in page
+
+    def test_scan_page_degrades_without_a_scanner(self, client, monkeypatch):
+        # The scan page is reachable even on a scanner-less setup and shows a
+        # calm line; the controls stay hidden until /scanners says otherwise.
+        page = client.get("/scan").text
+        assert 'id="scanStatus"' in page
+        assert 'id="scanControls" style="display:none' in page
+        assert "No scanner detected" in page      # wired into the JS
 
 
 class TestNotebookRedesign:
