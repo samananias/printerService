@@ -1,0 +1,123 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-03T19:00:00Z",
+  "title": "Design System: printerService",
+  "extensions": {
+    "colorMeta": {
+      "paper": {
+        "role": "neutral",
+        "displayName": "The Sheet",
+        "canonical": "#FBF7EE",
+        "tonalRamp": ["oklch(0.15 0.02 90)", "oklch(0.27 0.02 90)", "oklch(0.39 0.02 90)", "oklch(0.51 0.02 90)", "oklch(0.63 0.02 90)", "oklch(0.75 0.02 90)", "oklch(0.85 0.02 90)", "oklch(0.95 0.02 90)"]
+      },
+      "paper-raised": {
+        "role": "neutral",
+        "displayName": "Raised Field",
+        "canonical": "#FFFFFF",
+        "tonalRamp": ["oklch(0.15 0 0)", "oklch(0.27 0 0)", "oklch(0.39 0 0)", "oklch(0.51 0 0)", "oklch(0.63 0 0)", "oklch(0.75 0 0)", "oklch(0.85 0 0)", "oklch(0.95 0 0)"]
+      },
+      "rule": {
+        "role": "tertiary",
+        "displayName": "Ruled Line",
+        "canonical": "#B7D3EE",
+        "tonalRamp": ["oklch(0.15 0.06 250)", "oklch(0.27 0.06 250)", "oklch(0.39 0.06 250)", "oklch(0.51 0.06 250)", "oklch(0.63 0.06 250)", "oklch(0.75 0.06 250)", "oklch(0.85 0.06 250)", "oklch(0.95 0.06 250)"]
+      },
+      "rule-strong": {
+        "role": "tertiary",
+        "displayName": "Heavy Rule",
+        "canonical": "#8FB8E4",
+        "tonalRamp": ["oklch(0.15 0.09 250)", "oklch(0.27 0.09 250)", "oklch(0.39 0.09 250)", "oklch(0.51 0.09 250)", "oklch(0.63 0.09 250)", "oklch(0.75 0.09 250)", "oklch(0.85 0.09 250)", "oklch(0.95 0.09 250)"]
+      },
+      "margin-red": {
+        "role": "tertiary",
+        "displayName": "Margin Line (decorative, never errors)",
+        "canonical": "#F0776D",
+        "tonalRamp": ["oklch(0.15 0.15 25)", "oklch(0.27 0.15 25)", "oklch(0.39 0.15 25)", "oklch(0.51 0.15 25)", "oklch(0.63 0.15 25)", "oklch(0.75 0.15 25)", "oklch(0.85 0.15 25)", "oklch(0.95 0.15 25)"]
+      },
+      "ink-blue": {
+        "role": "primary",
+        "displayName": "Ballpoint Ink",
+        "canonical": "#24418E",
+        "tonalRamp": ["oklch(0.15 0.13 265)", "oklch(0.27 0.13 265)", "oklch(0.39 0.13 265)", "oklch(0.51 0.13 265)", "oklch(0.63 0.13 265)", "oklch(0.75 0.13 265)", "oklch(0.85 0.13 265)", "oklch(0.95 0.13 265)"]
+      },
+      "graphite": {
+        "role": "secondary",
+        "displayName": "Pencil Graphite",
+        "canonical": "#566072",
+        "tonalRamp": ["oklch(0.15 0.05 250)", "oklch(0.27 0.05 250)", "oklch(0.39 0.05 250)", "oklch(0.51 0.05 250)", "oklch(0.63 0.05 250)", "oklch(0.75 0.05 250)", "oklch(0.85 0.05 250)", "oklch(0.95 0.05 250)"]
+      },
+      "cyan-wet": {
+        "role": "primary",
+        "displayName": "Fresh Ink (printing)",
+        "canonical": "#0072A3",
+        "tonalRamp": ["oklch(0.15 0.13 230)", "oklch(0.27 0.13 230)", "oklch(0.39 0.13 230)", "oklch(0.51 0.13 230)", "oklch(0.63 0.13 230)", "oklch(0.75 0.13 230)", "oklch(0.85 0.13 230)", "oklch(0.95 0.13 230)"]
+      },
+      "green-pen": {
+        "role": "primary",
+        "displayName": "Teacher's Tick (done only)",
+        "canonical": "#1E7A4E",
+        "tonalRamp": ["oklch(0.15 0.12 155)", "oklch(0.27 0.12 155)", "oklch(0.39 0.12 155)", "oklch(0.51 0.12 155)", "oklch(0.63 0.12 155)", "oklch(0.75 0.12 155)", "oklch(0.85 0.12 155)", "oklch(0.95 0.12 155)"]
+      },
+      "red-pen": {
+        "role": "primary",
+        "displayName": "Teacher's Red Pen (failed)",
+        "canonical": "#C0392B",
+        "tonalRamp": ["oklch(0.15 0.17 25)", "oklch(0.27 0.17 25)", "oklch(0.39 0.17 25)", "oklch(0.51 0.17 25)", "oklch(0.63 0.17 25)", "oklch(0.75 0.17 25)", "oklch(0.85 0.17 25)", "oklch(0.95 0.17 25)"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Handwriting Title", "purpose": "The page title only — written like a notebook header." },
+      "heading": { "displayName": "Handwriting Heading", "purpose": "Section heads and status words; sits on a heavy rule." },
+      "body": { "displayName": "Body", "purpose": "Helper copy and error detail — anything that needs re-reading." },
+      "mono": { "displayName": "Machine Values", "purpose": "Job IDs, timestamps, DPI, error codes — nothing else." }
+    },
+    "shadows": [],
+    "breakpoints": { "mobile": "0px", "desktop": "768px" },
+    "motion": {
+      "pencil-write": "stroke-dashoffset 140 loop, 1.6s ease-in-out infinite — the only looping motion; prefers-reduced-motion shows a static drawn line",
+      "state-crossfade": "150-200ms opacity crossfade on status changes"
+    },
+    "componentSnippets": {
+      "button-primary": {
+        "html": "<button class=\"btn\">Print<svg class=\"btail\" aria-hidden=\"true\"><use href=\"#i-printer\"/></svg></button>",
+        "css": ".btn{display:inline-flex;align-items:center;gap:10px;min-height:48px;padding:8px 22px;font-family:'Patrick Hand',cursive;font-size:19px;color:#24418E;background:transparent;border:1.5px solid #24418E;border-radius:12px 14px 12px 14px/14px 12px 14px 12px}.btn:disabled{opacity:.4}"
+      },
+      "job-entry": {
+        "html": "<li class=\"job st-done\"><span class=\"mark\"><svg class=\"ic\"><use href=\"#i-check-circle-fill\"/></svg></span><div class=\"jbody\"><svg class=\"fmt\"><use href=\"#i-file-pdf\"/></svg><span class=\"fname\">report.pdf</span><span class=\"jid\">a1b2c3</span><span class=\"jstate\">done</span></div></li>",
+        "css": ".job{display:grid;grid-template-columns:52px minmax(0,1fr);align-items:center;min-height:46px}.jstate{font-family:'Patrick Hand',cursive;font-size:16.5px}.st-done{color:#1E7A4E}.st-failed{color:#C0392B}.st-queued{color:#566072}.jid{font-family:ui-monospace,monospace;font-size:12.5px;color:#566072}"
+      }
+    },
+    "narrative": {
+      "northStar": "The page IS the paper.",
+      "overview": "The service moves pixels to paper and back; the UI is an elementary-school exercise book. The interface is written on the sheet: headings sit on the lines, job entries are lines of handwriting, and the machine marks the margin like a teacher — green tick for done, red-pen note for failed, strike-through for cancelled.",
+      "keyCharacteristics": [
+        "The ruled background is the subject, not decoration (The World-Earned Stripe Rule).",
+        "Job state is always three signals: icon + the API's exact word + pen color (The Three-Signal Rule).",
+        "The margin column holds only marks; content never enters it.",
+        "One motion element: the pencil writing a wavy ink line while a job works."
+      ],
+      "rules": [
+        { "name": "The World-Earned Stripe Rule", "body": "The ruled background is world-earned — this page literally is ruled paper — but it stays faint, 1px, and never competes with text.", "section": "Colors" },
+        { "name": "The Margin-Red-Is-Not-Error Rule", "body": "Decorative margin-red is visibly lighter than red-pen; errors are always red-pen.", "section": "Colors" },
+        { "name": "The Short-Handwriting Rule", "body": "Handwriting carries labels and single words only; anything needing re-reading is set in the body face.", "section": "Typography" },
+        { "name": "The Empty-Margin Rule", "body": "The margin column holds state marks only — never content, never controls.", "section": "Layout" },
+        { "name": "The Three-Signal Rule", "body": "Status is always icon + exact API word + pen color; color never speaks alone.", "section": "Overview" }
+      ],
+      "dos": [
+        "Keep the sheet flat: two CSS gradients draw everything; no texture images.",
+        "Keep status = icon + exact word + pen color, everywhere.",
+        "Keep every asset inlined/self-hosted — zero runtime CDN calls.",
+        "Keep the margin for marks only."
+      ],
+      "donts": [
+        "No emoji anywhere (test-enforced).",
+        "No cards, shadows, or boxes around job entries.",
+        "No handwriting on long/error/numeric copy; no mono on ordinary labels.",
+        "No graph grid, sticky-note panels, torn edges, or a second paper texture.",
+        "No margin-red in error semantics; no decorative-trio colors on text."
+      ]
+    }
+  }
+}
+
+

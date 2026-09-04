@@ -23,3 +23,7 @@ htmlcov/
 
 # Z-Code
 .zcode/
+
+# Scan results (temp scan files)
+downloads/*
+!downloads/.gitkeep
