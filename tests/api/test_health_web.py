@@ -129,3 +129,62 @@ class TestNotebookRedesign:
         assert '<symbol id="i-pencil"' in page    # the signature element
 
 
+
+
+class TestLoginGate:
+    """The PIN login gate (docs/LOGIN_PLAN.md §6/§10): one shared overlay
+    on both pages, the old type-it-every-time PIN field gone, and the
+    gate provably inert when the server runs without a PIN."""
+
+    def test_gate_hooks_present_on_both_pages(self, client):
+        # Test-pinned hooks (LOGIN_PLAN §6), same convention as scanBtn.
+        for path in ("/", "/scan"):
+            page = client.get(path).text
+            assert 'id="pinOverlay"' in page
+            assert 'id="pinInput"' in page
+            assert 'id="pinRemember"' in page
+            assert 'id="pinError"' in page
+            assert 'onclick="submitLogin()"' in page
+
+    def test_gate_starts_hidden_and_is_status_driven(self, client):
+        # The gate must never show on its own initiative: hidden class by
+        # default, revealed only after /auth/status says pin_required.
+        for path in ("/", "/scan"):
+            page = client.get(path).text
+            assert 'class="gate hidden"' in page
+            assert 'fetch("/auth/status"' in page
+            assert "pin_required" in page
+            assert "session_valid" in page
+
+    def test_remember_checkbox_picks_storage(self, client):
+        # localStorage (remembered) vs sessionStorage (this tab only) —
+        # the plan's §3.3 client-side-only choice.
+        page = client.get("/").text
+        assert 'id="pinRemember"' in page
+        assert "localStorage" in page and "sessionStorage" in page
+        assert 'printerService.pinToken' in page   # namespaced key
+
+    def test_requests_use_the_session_token_not_the_pin(self, client):
+        # The old per-action PIN entry is gone; authHeaders() sends the
+        # opaque token instead. The raw PIN appears only in the login POST.
+        page = client.get("/").text
+        assert 'getElementById("pin")' not in page  # old field + reads gone
+        assert '"X-API-PIN"' not in page
+        assert "X-Session-Token" in page
+        assert 'fetch("/auth/login"' in page
+        scan_page = client.get("/scan").text
+        assert 'getElementById("pin")' not in scan_page
+
+    def test_error_text_stays_out_of_the_handwriting_face(self, client):
+        # WEBDESIGN_PLAN §3: error detail is real information — the
+        # pinError element carries the .status class (system font), and
+        # the handwriting .btn face stays on the Unlock button only.
+        page = client.get("/").text
+        assert 'id="pinError" class="status err hidden"' in page
+
+    def test_gate_wired_into_the_poll_cadence(self, client):
+        # Phase 3: a mid-session server restart raises the gate on the
+        # next 30 s beat, no manual reload needed.
+        page = client.get("/").text
+        assert "setInterval(checkGate, 30000)" in page
+        assert "checkGate();" in page

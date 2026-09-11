@@ -21,12 +21,25 @@ import hmac
 from fastapi import Header, HTTPException
 
 from app.config import API_PIN
+from app.services import sessions
 
 
-def require_pin(x_api_pin: str | None = Header(default=None)) -> None:
-    """FastAPI dependency: attach to any route that changes state."""
+def require_pin(
+    x_api_pin: str | None = Header(default=None),
+    x_session_token: str | None = Header(default=None),
+) -> None:
+    """FastAPI dependency: attach to any route that changes state.
+
+    LOGIN_PLAN §3.2: valid if the classic X-API-PIN header matches, OR a
+    currently-active session token is presented in X-Session-Token (the
+    web page's post-login credential). Purely additive — every caller
+    that only sends the PIN header behaves exactly as before.
+    """
     if not API_PIN:
         return  # auth disabled
+
+    if x_session_token and sessions.is_valid(x_session_token):
+        return
 
     if not x_api_pin or not hmac.compare_digest(x_api_pin, API_PIN):
         raise HTTPException(

@@ -30,7 +30,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.printer import windows
-from app.services import jobs, scan_jobs
+from app.services import jobs, scan_jobs, sessions
 
 # The printer name the fakes pretend Windows reports (matching the real
 # L3210's queue name keeps the tests readable).
@@ -56,6 +56,18 @@ def fresh_job_store(tmp_path, monkeypatch):
     # patch both halves (SCAN_PLAN §0: scan never touches print's store).
     monkeypatch.setattr(scan_jobs, "_db_path", tmp_path / "jobs.sqlite3")
     monkeypatch.setattr(scan_jobs, "_conn", None)
+
+
+@pytest.fixture(autouse=True)
+def fresh_sessions(monkeypatch):
+    """An empty session-token set for every test (LOGIN_PLAN §3).
+
+    sessions.py keeps a module-level set, exactly like the job store
+    above — without this, a token minted in one test would still validate
+    in the next. reset() is the same thing a real server restart does for
+    free.
+    """
+    sessions.reset()
 
 
 @pytest.fixture(autouse=True)

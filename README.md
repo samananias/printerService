@@ -269,7 +269,7 @@ Copy `.env.example` to `.env` to configure optional server settings. All keys ar
 | Key | Default | Description |
 |---|---|---|
 | `MAX_UPLOAD_MB` | `25` | Maximum allowed upload size in megabytes (larger files rejected with HTTP 413). |
-| `API_PIN` | *(empty)* | Optional security PIN. When set, requests require the `X-API-PIN` header (the web interface will display a PIN input field). |
+| `API_PIN` | *(empty)* | Optional security PIN. When set, the web interface shows a one-time login gate (the PIN is exchanged for a session token, then never sent again); API clients may still send the raw `X-API-PIN` header. Leave empty to disable authentication entirely. |
 | `PRINTER_NAME` | *(empty)* | Specific Windows printer name to target. If empty, the system default printer is used. |
 | `SUMATRA_PATH` | *(empty)* | Custom path to `SumatraPDF.exe`. Leave empty to use automatic standard path detection. |
 | `PAPER_SIZE` | *(empty)* | Default paper size token passed to driver (e.g. `A4`). Leave empty to let the Windows driver choose. |

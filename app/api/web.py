@@ -32,12 +32,16 @@ point of view):
      multipart boundary itself; setting it manually breaks the request.
   4. The response is the JSON from POST /print, which we display.
 
-The JS logic (upload, PIN header, polling, scan detection, innerHTML
-safety) carries over from the previous page — this revision restyled
-presentation and status rendering (emoji status markers are gone: status
-is icon + exact API word + pen color), and added a Jobs list (GET /jobs,
-already served by app/api/jobs.py) written on the ruled lines with
-per-state ink colors and a cancel button for active jobs.
+The JS logic (upload, session-token auth, polling, scan detection,
+innerHTML safety) carries over from the previous page — this revision
+restyled presentation and status rendering (emoji status markers are
+gone: status is icon + exact API word + pen color), and added a Jobs list
+(GET /jobs, already served by app/api/jobs.py) written on the ruled lines
+with per-state ink colors and a cancel button for active jobs. The PIN
+login gate (docs/LOGIN_PLAN.md) then replaced the old type-it-every-time
+PIN field: the raw PIN is submitted once to POST /auth/login, the opaque
+token it returns is stored client-side, and every request sends it in
+X-Session-Token via the shared authHeaders() helper.
 """
 
 import base64
@@ -347,6 +351,17 @@ PAGE_CSS3 = """
                text-decoration: none; color: inherit; }
   .topright { display: flex; align-items: center; gap: 12px; }
   .btn.nav { min-height: 44px; padding: 6px 16px; font-size: 17px; }
+
+  /* ---- the login gate (LOGIN_PLAN §6): a third page, not a dialog ----
+     Full-viewport takeover on the same paper — never a floating card
+     (WEBDESIGN_PLAN: no cards, shadows, or boxed containers). */
+  .gate { position: fixed; inset: 0; z-index: 40; background: var(--paper);
+          overflow: auto; }
+  .gate-remember { display: flex; align-items: center; gap: 9px;
+                   margin: 2px 0 16px 8px; font-size: 14px;
+                   color: var(--graphite); cursor: pointer; }
+  .gate-remember input { width: 18px; height: 18px; flex: none;
+                         accent-color: var(--ink-blue); }
 </style>
 </head>
 <body>
@@ -377,12 +392,6 @@ PAGE_BODY_HOME = """<header class="top">
       </label>
       <input type="file" id="file"
              accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp,.txt,.csv">
-    </div>
-    <div class="row">
-      <span class="ic xs" style="color:var(--graphite)"
-            aria-hidden="true"><svg><use href="#i-lock-key"/></svg></span>
-      <input type="password" id="pin" autocomplete="off"
-             placeholder="PIN (only if the server set one)">
     </div>
     <button id="printBtn" class="btn" onclick="sendPrint()">Print<svg
       class="btail" aria-hidden="true"><use href="#i-printer"/></svg></button>
@@ -466,12 +475,7 @@ PAGE_BODY_SCAN = """<header class="top">
     <div id="scanControls" style="display:none;">
       <p class="sub">Scanner: <span id="scanName"></span></p>
       <div class="row">
-        <span class="ic xs" style="color:var(--graphite)"
-              aria-hidden="true"><svg><use href="#i-lock-key"/></svg></span>
-        <input type="password" id="pin" autocomplete="off"
-               placeholder="PIN (only if the server set one)">
-      </div>
-      <button id="scanBtn" class="btn scanbtn" onclick="startScan()">Scan<svg
+        <button id="scanBtn" class="btn scanbtn" onclick="startScan()">Scan<svg
         class="btail" aria-hidden="true"><use href="#i-scan"/></svg></button>
       <div class="working" id="scanWorking" hidden aria-hidden="true">
         <svg viewBox="0 0 150 28" width="132" height="25">
@@ -510,6 +514,39 @@ PAGE_BODY_SCAN = """<header class="top">
     <div id="scanResult" class="status" role="status"></div>
   </div>
 </main>
+"""
+
+# The login gate (docs/LOGIN_PLAN.md §6) — shared by BOTH pages, a third
+# page of the same notebook rather than a modal card. Hidden by default:
+# JS reveals it only when /auth/status reports a PIN is required AND the
+# stored session token is not currently valid. The ids are test-pinned
+# hooks (same convention as startScan()/scanBtn).
+GATE_HTML = """<div id="pinOverlay" class="gate hidden" role="dialog"
+     aria-modal="true" aria-labelledby="gateTitle">
+  <header class="top">
+    <div class="brand">
+      <img src="/favicon.svg" alt="">
+      <h1>printerService</h1>
+    </div>
+    <span class="ic health" aria-hidden="true"><svg><use
+      href="#i-lock-key"/></svg></span>
+  </header>
+  <main class="sheet">
+    <section class="act">
+      <h2 class="rulehead" id="gateTitle"><span class="ic"
+        aria-hidden="true"><svg><use href="#i-lock-key"/></svg></span>
+        Enter PIN</h2>
+      <div class="row">
+        <input type="password" id="pinInput" autocomplete="current-password"
+               placeholder="PIN" aria-label="PIN">
+      </div>
+      <label class="gate-remember"><input type="checkbox" id="pinRemember"
+        checked> Remember this device</label>
+      <button class="btn" onclick="submitLogin()">Unlock</button>
+      <div id="pinError" class="status err hidden" role="alert"></div>
+    </section>
+  </main>
+</div>
 """
 
 PAGE_JS1 = """
@@ -558,8 +595,7 @@ function iconEl(name, cls) {
 // needed. Resumes polling as if the job had just been queued.
 async function retryJob() {
   if (!failedJobId) { return; }
-  const pin = document.getElementById("pin").value.trim();
-  const headers = pin ? { "X-API-PIN": pin } : {};
+  const headers = authHeaders();
   retryControls(false);
   show("Retrying job " + failedJobId + "…", "ok");
   try {
@@ -568,6 +604,8 @@ async function retryJob() {
     const data = await response.json();
     if (response.ok) {
       poll(failedJobId, 0);
+    } else if (response.status === 401) {
+      sessionExpired();
     } else {
       show("Retry refused: " + (data.detail || response.status), "err");
     }
@@ -603,10 +641,9 @@ async function sendPrint() {
     body.append("paper", document.getElementById("paper").value);
     body.append("color_mode", document.getElementById("colorMode").value);
 
-    // Send the PIN header only if the user typed one; the server ignores
-    // it entirely when no PIN is configured (auth disabled).
-    const pin = document.getElementById("pin").value.trim();
-    const headers = pin ? { "X-API-PIN": pin } : {};
+    // Credentials come from the login gate's stored session token
+    // (authHeaders below); the server never trusts the browser anyway.
+    const headers = authHeaders();
 
     const response = await fetch("/print", { method: "POST", body, headers });
     const data = await response.json();
@@ -616,7 +653,7 @@ async function sendPrint() {
       poll(data.job_id, 0);
       loadJobs();
     } else if (response.status === 401) {
-      show("Wrong PIN.", "err");
+      sessionExpired();
     } else {
       // The server answered with a problem (415 not-a-PDF, 413 too big, …)
       show("Server said: " + (data.detail || response.status), "err");
@@ -641,9 +678,7 @@ async function poll(jobId, attempt) {
     return;
   }
   try {
-    const pin = document.getElementById("pin").value.trim();
-    const headers = pin ? { "X-API-PIN": pin } : {};
-    const response = await fetch("/jobs/" + jobId, { headers });
+    const response = await fetch("/jobs/" + jobId, { headers: authHeaders() });
     if (!response.ok) {
       show("Lost track of job " + jobId + " (HTTP " + response.status + ")",
            "err");
@@ -777,12 +812,13 @@ async function loadJobs() {
 }
 
 async function cancelJob(jobId) {
-  const pin = document.getElementById("pin").value.trim();
-  const headers = pin ? { "X-API-PIN": pin } : {};
+  const headers = authHeaders();
   try {
     const response = await fetch("/jobs/" + jobId,
                                  { method: "DELETE", headers });
-    if (!response.ok) {
+    if (response.status === 401) {
+      sessionExpired();
+    } else if (!response.ok) {
       const data = await response.json().catch(() => ({}));
       show("Cancel refused: " + (data.detail || response.status), "err");
     }
@@ -790,6 +826,120 @@ async function cancelJob(jobId) {
     show("Could not reach the server. Are you on the same Wi-Fi?", "err");
   }
   loadJobs();
+}
+
+// ---- the login gate (docs/LOGIN_PLAN.md §3/§5) ----
+// One shared block for both pages. The raw PIN is submitted exactly once,
+// to POST /auth/login; from then on every request carries the opaque
+// session token it returned — never the PIN, never persisted anywhere the
+// server can see. "Remember this device" is purely a client-side storage
+// choice: localStorage survives the browser, sessionStorage dies with it.
+const TOKEN_KEY = "printerService.pinToken";
+
+function storedToken() {
+  return sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY);
+}
+
+function saveToken(token, remember) {
+  (remember ? localStorage : sessionStorage).setItem(TOKEN_KEY, token);
+}
+
+function clearToken() {
+  localStorage.removeItem(TOKEN_KEY);
+  sessionStorage.removeItem(TOKEN_KEY);
+}
+
+// The single place every authed request builds its headers — replaces the
+// old per-action "type the PIN again" field.
+function authHeaders() {
+  const token = storedToken();
+  return token ? { "X-Session-Token": token } : {};
+}
+
+function showGate() {
+  const overlay = document.getElementById("pinOverlay");
+  if (!overlay) { return; }
+  overlay.classList.remove("hidden");
+  document.getElementById("pinError").classList.add("hidden");
+  const input = document.getElementById("pinInput");
+  input.value = "";
+  input.focus();
+}
+
+function hideGate() {
+  document.getElementById("pinOverlay").classList.add("hidden");
+}
+
+// A 401 from any protected route means the session died mid-action
+// (server restarted since login) — raise the gate, not a dead-end error.
+function sessionExpired() {
+  clearToken();
+  showGate();
+}
+
+// Focus is trapped while the gate is up: unlike every convenience
+// overlay in this app, this one genuinely blocks use of the page.
+document.addEventListener("keydown", function (event) {
+  const overlay = document.getElementById("pinOverlay");
+  if (!overlay || overlay.classList.contains("hidden")
+      || event.key !== "Tab") { return; }
+  const focusable = overlay.querySelectorAll("input, button");
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+});
+
+async function submitLogin() {
+  const input = document.getElementById("pinInput");
+  const error = document.getElementById("pinError");
+  const pin = input.value.trim();
+  if (!pin) { input.focus(); return; }
+  try {
+    const response = await fetch("/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pin: pin }),
+    });
+    if (response.ok) {
+      const data = await response.json();
+      saveToken(data.token,
+                document.getElementById("pinRemember").checked);
+      hideGate();
+    } else {
+      // Error detail is real information: system font, --red-pen, never
+      // the handwriting face (WEBDESIGN_PLAN §3). Stale tokens, if any,
+      // are discarded; focus stays in the field.
+      error.textContent = "Incorrect PIN.";
+      error.classList.remove("hidden");
+      clearToken();
+      input.focus();
+      input.select();
+    }
+  } catch (networkError) {
+    error.textContent = "Could not reach the server. Are you on the same Wi-Fi?";
+    error.classList.remove("hidden");
+  }
+}
+
+// Phase 3 (LOGIN_PLAN §5 step 5): the initial check happens at load, and
+// the same check runs on the health poll's 30 s cadence — so a server
+// restart mid-session raises the gate on the next beat without a reload.
+async function checkGate() {
+  try {
+    const response = await fetch("/auth/status", { headers: authHeaders() });
+    const info = await response.json();
+    if (info.pin_required && info.session_valid !== true) {
+      sessionExpired();
+    }
+  } catch (networkError) {
+    /* server unreachable — the header wifi icon already says so */
+  }
 }
 """
 PAGE_JS3 = """
@@ -854,8 +1004,7 @@ if (document.getElementById("scanSection")) {
     scanBtn.disabled = true;
     scanWorking.hidden = false;
     scanShow("Starting scan…", "ok");
-    const pin = document.getElementById("pin").value.trim();
-    const headers = pin ? { "X-API-PIN": pin } : {};
+    const headers = authHeaders();
     // Scan options (Phase 4): DPI, color mode, output format — strictly
     // allowlisted server-side; the selects only ever offer valid values.
     const body = new FormData();
@@ -870,7 +1019,7 @@ if (document.getElementById("scanSection")) {
         pollScan(data.job_id, 0);
       } else if (response.status === 401) {
         scanSettle();
-        scanShow("Wrong PIN.", "err");
+        sessionExpired();
       } else {
         scanSettle();
         scanShow("Server said: " + (data.detail || response.status), "err");
@@ -891,9 +1040,8 @@ if (document.getElementById("scanSection")) {
       return;
     }
     try {
-      const pin = document.getElementById("pin").value.trim();
-      const headers = pin ? { "X-API-PIN": pin } : {};
-      const response = await fetch("/scan/jobs/" + jobId, { headers });
+      const response = await fetch("/scan/jobs/" + jobId,
+                                   { headers: authHeaders() });
       if (!response.ok) {
         scanSettle();
         scanShow("Lost track of scan job " + jobId + " (HTTP " +
@@ -965,6 +1113,8 @@ if (fileInput) {
 }
 
 checkHealth();   // the header wifi icon exists on both pages
+checkGate();     // the login gate: on load, and again on the health
+setInterval(checkGate, 30000);   // poll's cadence (LOGIN_PLAN §5 step 5)
 if (document.getElementById("jobList")) {   // the print page only
   loadJobs();
   setInterval(loadJobs, 5000);  // cheap on a LAN; keeps the sheet fresh
@@ -975,13 +1125,14 @@ setInterval(checkHealth, 30000);
 </html>"""
 # The two pages are assembled once at import: asset placeholders become the
 # inlined font and the icon sprite (both degrading to nothing if the
-# committed files are missing).
+# committed files are missing), and the shared login-gate markup is added
+# to both — hidden by default, revealed by /auth/status-driven JS only.
 PAGE = (
-    PAGE_CSS1 + PAGE_CSS2 + PAGE_CSS3 + PAGE_BODY_HOME + PAGE_HTML2
-    + PAGE_JS1 + PAGE_JS2 + PAGE_JS3
+    PAGE_CSS1 + PAGE_CSS2 + PAGE_CSS3 + GATE_HTML + PAGE_BODY_HOME
+    + PAGE_HTML2 + PAGE_JS1 + PAGE_JS2 + PAGE_JS3
 )
 SCAN_PAGE = (
-    PAGE_CSS1 + PAGE_CSS2 + PAGE_CSS3 + PAGE_BODY_SCAN
+    PAGE_CSS1 + PAGE_CSS2 + PAGE_CSS3 + GATE_HTML + PAGE_BODY_SCAN
     + PAGE_JS1 + PAGE_JS2 + PAGE_JS3
 )
 for _page_name, _page in (("PAGE", PAGE), ("SCAN_PAGE", SCAN_PAGE)):

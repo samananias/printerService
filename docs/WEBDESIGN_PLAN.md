@@ -492,22 +492,59 @@ MOBILE — SCAN PAGE (/scan, same sheet)
   `getElementById("scanDpi"|"scanColorMode"|"scanFormat")`,
   `href="/favicon.svg"` — zero test changes were needed for the restyle;
   the new tests only *add* pins.
-- **Fetch/FormData logic untouched** — upload, PIN header, polling
-  cadence, and the innerHTML-safety rule (nothing from the server enters
-  `innerHTML` except the server-issued job id in the scan download link)
-  all carry over unchanged.
+- **Fetch/FormData logic untouched** — upload, polling cadence, and the
+  innerHTML-safety rule (nothing from the server enters `innerHTML`
+  except the server-issued job id in the scan download link) all carry
+  over unchanged. (The PIN-header half of this line was later superseded
+  by the login gate — §12.)
 - The favicon SVG stays as-is (PRODUCT.md brand commitment) — its cyan/
   magenta/yellow accents are the print-service mark, not the page theme.
 - The durable visual system is recorded in `DESIGN.md` +
   `.impeccable/design.json`; product truth in `PRODUCT.md`.
 
+---
+
+## 12. Addendum — the login gate (2026-09-04)
+
+The PIN login gate (full decision record: [LOGIN_PLAN.md](LOGIN_PLAN.md))
+is a **third page of the same notebook**, not a dialog: a full-viewport
+takeover reusing the identical `.top` header zone and ruled `.sheet`
+background, hidden by default (`class="gate hidden"`) and revealed only
+when `GET /auth/status` reports `pin_required: true` and no valid stored
+session token.
+
+- **No new visual vocabulary.** No card, no shadow, no dimmed backdrop —
+  the "no boxed containers" rule holds. The heading sits on the first
+  rule like any other `.rulehead`; the field is the standard
+  `--paper-raised` input; the Unlock button is the existing drawn-box
+  `.btn`. Icon: `lock-key` (already in the §4 mapping — no new icon).
+- **New pinned hooks** (same convention as `startScan()`/`scanBtn`):
+  `id="pinOverlay"`, `id="pinInput"`, `id="pinRemember"`,
+  `id="pinError"`, `onclick="submitLogin()"` — pinned by
+  `TestLoginGate` in `tests/api/test_health_web.py`.
+- **The old per-action PIN field is gone.** Revision 2's inline
+  `id="pin"` field on both pages was removed: the raw PIN is submitted
+  exactly once to `POST /auth/login`, the returned opaque token is
+  stored client-side (`localStorage` vs `sessionStorage` per the
+  Remember checkbox, namespaced key `printerService.pinToken`), and
+  every request sends it in `X-Session-Token` via one shared
+  `authHeaders()` helper.
+- **Error text never uses the handwriting face** (§3 rule): "Incorrect
+  PIN." renders through `.status.err` — system font, `--red-pen`.
+- **It genuinely blocks the page** (unlike every convenience overlay
+  here): `role="dialog"`, `aria-modal="true"`, autofocus, Tab focus
+  trap.
+- Gate markup + JS are shared by both pages — assembled into `PAGE` and
+  `SCAN_PAGE` from one `GATE_HTML` block, the same way the nav hand-off
+  is shared.
 
 ---
 
 *Revision 2 — the exercise-book world, decided by the owner 2026-09-03
-("elementary: paper with blue-red-blue lines"). Product truth lives in
-`PRODUCT.md`; this file owns the visual world. v1 (print shop) is retired
-but its state-color discipline and constraint set survive here.*
+("elementary: paper with blue-red-blue lines"); §12 addendum (the login
+gate) 2026-09-04. Product truth lives in `PRODUCT.md`; this file owns
+the visual world. v1 (print shop) is retired but its state-color
+discipline and constraint set survive here.*
 
 
 

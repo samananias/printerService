@@ -30,6 +30,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.api.auth import router as auth_router
 from app.api.jobs import router as jobs_router
 from app.api.print import router as print_router
 from app.api.printers import router as printers_router
@@ -111,4 +112,10 @@ app.include_router(scanners_router)
 # Scan pipeline (docs/SCAN_PLAN.md Phase 2): POST /scan + job status /
 # download / cancel. Own store, own namespace — never touches print code.
 app.include_router(scan_router)
+
+# PIN login gate (docs/LOGIN_PLAN.md Phase 1): GET /auth/status + POST
+# /auth/login. Deliberately open endpoints — /status must be checkable
+# before the client knows whether to show the gate, and /login is how the
+# raw PIN is exchanged once for a session token.
+app.include_router(auth_router)
 
